@@ -12,3 +12,14 @@
 @media(max-width:760px){.drive-pad{grid-template-rows:44px 44px 44px}.drive-panel>.enable-button{min-height:44px}.claw-toggle button{min-height:44px}}
 
 .video-stage video.stale{opacity:.22}
+
+/* Put STOP next to Enable so it remains in the operator's immediate reach. */
+.drive-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin:0 18px;flex-shrink:0}
+.drive-actions .enable-button,.drive-actions .stop-button{width:100%;min-width:0;min-height:48px;height:auto}
+.drive-actions .enable-button{padding:8px;font-size:11px}
+.drive-actions .stop-button{display:flex;justify-content:center;padding:8px 6px}
+.drive-actions .stop-button>span{gap:6px;font-size:11px;letter-spacing:0}
+.drive-actions .stop-button svg{width:17px;height:17px;flex:none}
+.drive-actions .stop-button kbd{display:none}
+.stop-hint{margin:0 18px 16px;color:#a78e7c;font-size:10px;line-height:1.4;flex-shrink:0}
+@media(max-width:480px){.drive-actions{gap:8px;margin:0 10px}.drive-actions .enable-button,.drive-actions .stop-button{min-height:44px}.drive-actions .enable-button,.drive-actions .stop-button>span{font-size:10px}.stop-hint{margin:0 10px 12px}}

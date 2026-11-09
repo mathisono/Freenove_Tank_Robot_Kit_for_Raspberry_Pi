@@ -72,7 +72,10 @@
 
           <section class="panel drive-panel" aria-labelledby="driveTitle">
             <div class="panel-heading"><div><span class="section-number">03</span><h2 id="driveTitle">Drive</h2></div><span class="control-state" id="controlState">DISABLED</span></div>
-            <button class="enable-button" id="enableButton" type="button" disabled><span class="status-dot"></span><span id="enableLabel">Enable controls</span></button>
+            <div class="drive-actions">
+              <button class="enable-button" id="enableButton" type="button" disabled><span class="status-dot"></span><span id="enableLabel">Enable controls</span></button>
+              <button id="stopButton" class="stop-button" type="button"><span><svg><use href="#i-stop"/></svg>STOP ROVER</span><kbd>SPACE</kbd></button>
+            </div>
             <div class="drive-pad" id="drivePad" role="group" aria-label="Hold to drive the rover">
               <button class="drive-button drive-up" type="button" data-drive="forward" aria-label="Hold to drive forward" disabled><svg><use href="#i-arrow"/></svg><kbd>W</kbd></button>
               <button class="drive-button drive-left" type="button" data-drive="left" aria-label="Hold to turn left" disabled><svg><use href="#i-arrow"/></svg><kbd>A</kbd></button>
@@ -82,6 +85,7 @@
             </div>
             <div class="speed-control"><label for="speedLimit">Drive speed <output id="speedValue" for="speedLimit">35%</output></label><input id="speedLimit" type="range" min="15" max="70" step="5" value="35" aria-label="Drive speed limit"><div class="range-labels"><span>PRECISE</span><span>QUICK</span></div></div>
             <p class="control-hint">Hold a direction or use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. Release to stop.</p>
+            <p class="stop-hint">STOP also cancels retrieval. The claw stays held until Release.</p>
           </section>
         </aside>
 
@@ -90,7 +94,6 @@
           <div class="claw-progress"><span class="metric-name">RETRIEVAL STATUS</span><div class="retrieval-state"><span id="retrievalDot" class="status-dot"></span><strong id="retrievalLabel">Standing by</strong></div><p id="retrievalDetail">Enable controls to begin.</p><div class="progress-steps" aria-label="Retrieval progress"><span data-step="target">Find ball</span><i></i><span data-step="approach">Approach</span><i></i><span data-step="grip">Grip</span></div></div>
         </section>
 
-        <section class="stop-panel" aria-label="Stop controls"><button id="stopButton" class="stop-button" type="button"><span><svg><use href="#i-stop"/></svg>STOP ROVER</span><kbd>SPACE</kbd></button><p>Stops movement and cancels retrieval.<br>The claw command is held until Release.</p></section>
       </div>
 
       <footer class="page-footer"><span><span class="status-dot"></span>FREENOVE V2.0</span><span>DIRECT CONTROL · LOCAL VISION</span><span id="footerStatus">No active control session</span></footer>
