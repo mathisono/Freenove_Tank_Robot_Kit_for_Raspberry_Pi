@@ -21,9 +21,7 @@
     "stale_after": 0.75
   },
   "status_led": {
-    "enabled": false,
-    "s2_sense_gpio": null,
-    "s2_active_high": true
+    "enabled": false
   },
   "hardware": {
     "board_version": 2,

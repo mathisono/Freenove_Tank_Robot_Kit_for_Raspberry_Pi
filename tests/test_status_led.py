@@ -1,20 +1,18 @@
-from rover_web.hardware import HARDWARE_DEFAULTS
+import json
+
+from rover_web.config import load_config
 from rover_web.status_led import (BoardStatusLed, LedState, SpiPixel, encode_grb,
                                   select_state, state_color, validate_status_led_config)
 
 
-def test_status_requires_measured_s2_before_claiming_power_state():
-    assert select_state(web_connected=False, s2_on=None, control_enabled=False) == LedState.WAITING
-    assert select_state(web_connected=True, s2_on=None, control_enabled=True) == LedState.S2_UNKNOWN
-    assert select_state(web_connected=True, s2_on=False, control_enabled=True) == LedState.S2_OFF
-    assert select_state(web_connected=True, s2_on=False, control_enabled=False) == LedState.S2_OFF
-    assert select_state(web_connected=True, s2_on=True, control_enabled=False) == LedState.CONTROL_DISABLED
-    assert select_state(web_connected=True, s2_on=True, control_enabled=True) == LedState.CONTROL_ENABLED
-    assert state_color(LedState.S2_UNKNOWN, 0) == (0, 0, 0)
+def test_status_reports_only_web_and_control_state():
+    assert select_state(web_connected=False, control_enabled=False) == LedState.WAITING
+    assert select_state(web_connected=False, control_enabled=True) == LedState.WAITING
+    assert select_state(web_connected=True, control_enabled=False) == LedState.CONTROL_DISABLED
+    assert select_state(web_connected=True, control_enabled=True) == LedState.CONTROL_ENABLED
+    assert state_color(LedState.UNAVAILABLE, 0) == (0, 0, 0)
     assert state_color(LedState.WAITING, 0) == (0, 20, 0)
     assert state_color(LedState.WAITING, 0.5) == (0, 0, 0)
-    assert state_color(LedState.S2_OFF, 0) == (20, 14, 0)
-    assert state_color(LedState.S2_OFF, 0.5) == (0, 0, 0)
     assert state_color(LedState.CONTROL_DISABLED, 0.5) == (20, 0, 0)
     assert state_color(LedState.CONTROL_ENABLED, 0.5) == (0, 20, 0)
 
@@ -52,32 +50,22 @@ def test_spi_writer_only_writes_changes_and_turns_off_before_close():
     assert spi.closed
 
 
-def test_status_led_requires_a_real_nonconflicting_sense_pin():
-    config = {"enabled": False, "s2_sense_gpio": None, "s2_active_high": True}
-    validate_status_led_config(config, HARDWARE_DEFAULTS)
+def test_status_led_can_be_enabled_without_a_sense_pin():
+    config = {"enabled": False}
+    validate_status_led_config(config, {})
     config["enabled"] = True
-    try:
-        validate_status_led_config(config, HARDWARE_DEFAULTS)
-    except ValueError as exc:
-        assert "physically wired" in str(exc)
-    else:
-        raise AssertionError("Enabled LED accepted no S2 sense GPIO")
-    for pin in (10, 12, 16, 22, 24):
-        config["s2_sense_gpio"] = pin
-        try:
-            validate_status_led_config(config, HARDWARE_DEFAULTS)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError(f"Reserved GPIO {pin} was accepted")
-    config["s2_sense_gpio"] = 25
-    validate_status_led_config(config, HARDWARE_DEFAULTS)
+    validate_status_led_config(config, {})
 
 
-def test_led_state_follows_sensed_s2_and_web_control():
-    class Sensor:
-        value = 0
+def test_old_s2_settings_do_not_block_enabling_led(tmp_path):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"status_led": {"enabled": True,
+                                                "s2_sense_gpio": None,
+                                                "s2_active_high": True}}))
+    assert load_config(path)["status_led"] == {"enabled": True}
 
+
+def test_led_state_follows_web_control():
     class Pixel:
         def __init__(self):
             self.colors = []
@@ -85,16 +73,12 @@ def test_led_state_follows_sensed_s2_and_web_control():
         def show(self, color):
             self.colors.append(color)
 
-    sensor, pixel = Sensor(), Pixel()
-    led = BoardStatusLed({"s2_active_high": True}, sensor=sensor, pixel=pixel, clock=lambda: 0)
+    pixel = Pixel()
+    led = BoardStatusLed({"enabled": True}, pixel=pixel, clock=lambda: 0)
     led.tick()
     assert led.status()["state"] == "waiting"
     assert pixel.colors[-1] == (0, 20, 0)
     led.set_web_state(connected=True, enabled=False)
-    led.tick()
-    assert led.status()["state"] == "s2_off"
-    assert pixel.colors[-1] == (20, 14, 0)
-    sensor.value = 1
     led.tick()
     assert led.status()["state"] == "control_disabled"
     assert pixel.colors[-1] == (20, 0, 0)
@@ -102,3 +86,4 @@ def test_led_state_follows_sensed_s2_and_web_control():
     led.tick()
     assert led.status()["state"] == "control_enabled"
     assert pixel.colors[-1] == (0, 20, 0)
+    assert "s2_on" not in led.status()

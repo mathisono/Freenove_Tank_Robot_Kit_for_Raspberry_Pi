@@ -166,7 +166,7 @@ class Console:
                      owner=self.owner.identity if self.owner else None,
                      search_available=False)
         state["status_led"] = (self.status_led.status() if self.status_led else
-                               {"state": "unavailable", "s2_on": None, "error": self.status_led_error})
+                               {"state": "unavailable", "error": self.status_led_error})
         return state
 
     def revoke(self, reason: str) -> None:

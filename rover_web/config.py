@@ -50,6 +50,11 @@ def load_config(path: str | Path | None = None) -> dict:
             supplied = json.load(handle)
         if not isinstance(supplied, dict):
             raise ValueError("Configuration must contain a JSON object")
+        # Older installations may still carry the unused S2 sense settings.
+        status_led = supplied.get("status_led")
+        if isinstance(status_led, dict):
+            status_led.pop("s2_sense_gpio", None)
+            status_led.pop("s2_active_high", None)
         _merge(result, supplied)
     validate_config(result)
     return result
