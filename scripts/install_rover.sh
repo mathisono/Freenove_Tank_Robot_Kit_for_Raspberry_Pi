@@ -15,7 +15,7 @@ if [[ "$PI_MODEL" != *'Raspberry Pi 4'* ]]; then
 fi
 "$SYSTEM_PYTHON" -c 'import sys; assert sys.version_info >= (3, 11), "Use Raspberry Pi OS Bookworm/Trixie (Python 3.11+)"'
 sudo apt-get update
-sudo apt-get install -y python3-venv python3-pip python3-picamera2 python3-opencv python3-numpy python3-gpiozero python3-lgpio
+sudo apt-get install -y python3-venv python3-pip python3-picamera2 python3-opencv python3-numpy python3-gpiozero python3-lgpio python3-spidev
 # Apt's camera/OpenCV modules belong to the OS interpreter, not whichever
 # custom Python or active virtual environment appears first on PATH.
 "$SYSTEM_PYTHON" -m venv --system-site-packages .venv

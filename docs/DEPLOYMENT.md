@@ -99,6 +99,31 @@ to the internet. WebRTC needs a reachable UDP path; Wi-Fi client isolation or
 firewall rules can prevent video even if the HTTP page opens. An SSH TCP
 forward alone does not forward WebRTC UDP.
 
+## Optional C12-adjacent status LED
+
+On the V2 board the RGB LEDs are indexed front-right LED0, front-left LED1,
+rear-left LED2, rear-right LED3. LED3 is beside C12. The status feature writes
+only LED3 through SPI0; the other three pixels are kept off. `python3-spidev`
+and an enabled SPI0 overlay are required.
+
+S2 Load is a physical switch, **not** a software control or interlock. The
+stock board's S2 power lamp does not by itself expose a Pi GPIO input. The
+status feature therefore remains disabled unless an electrically verified S2
+sense signal is connected to a free BCM GPIO. Never connect a motor/load rail
+directly to the Pi: the input must be conditioned to 0–3.3 V, share a suitable
+reference or be isolated, and be confirmed with a meter in both S2 positions.
+Do not use motor, sonar, servo, IR, or SPI pins for the sense input.
+
+After verifying the wiring, set `status_led.enabled=true`,
+`status_led.s2_sense_gpio` to that BCM pin, and `status_led.s2_active_high` to
+match the measured logic in `/etc/freenove-rover/config.json`. Check the config
+before restarting. With no web client LED3 blinks green; with a client it
+blinks yellow when measured S2 is off, shows red when S2 is on and control is
+disabled, and shows solid green when S2 is on and control is enabled. A failed
+or unavailable sense input never claims an S2 state. The LED is informative
+only; STOP, the motor watchdog, and the physical S2 switch remain the safety
+mechanisms.
+
 ## Camera and Direct controls
 
 Verify orientation/focus, moving video, decoded FPS, camera age, and control

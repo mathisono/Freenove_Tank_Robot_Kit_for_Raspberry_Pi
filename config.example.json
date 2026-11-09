@@ -20,6 +20,11 @@
     "rotation180": true,
     "stale_after": 0.75
   },
+  "status_led": {
+    "enabled": false,
+    "s2_sense_gpio": null,
+    "s2_active_high": true
+  },
   "hardware": {
     "board_version": 2,
     "left_forward_gpio": 24,

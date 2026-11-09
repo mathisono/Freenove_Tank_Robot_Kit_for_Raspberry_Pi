@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .control import CONTROL_DEFAULTS, validate_control_config
 from .hardware import HARDWARE_DEFAULTS, validate_hardware_config
+from .status_led import STATUS_LED_DEFAULTS, validate_status_led_config
 from .vision import VISION_DEFAULTS, validate_vision_config
 
 CAMERA_DEFAULTS = {
@@ -25,7 +26,8 @@ SERVER_DEFAULTS = {
 
 def default_config() -> dict:
     return deepcopy({"server": SERVER_DEFAULTS, "camera": CAMERA_DEFAULTS,
-                     "hardware": HARDWARE_DEFAULTS, "control": CONTROL_DEFAULTS,
+                     "hardware": HARDWARE_DEFAULTS, "status_led": STATUS_LED_DEFAULTS,
+                     "control": CONTROL_DEFAULTS,
                      "vision": VISION_DEFAULTS})
 
 
@@ -55,6 +57,7 @@ def load_config(path: str | Path | None = None) -> dict:
 
 def validate_config(config: dict) -> None:
     validate_hardware_config(config["hardware"])
+    validate_status_led_config(config["status_led"], config["hardware"])
     validate_control_config(config["control"])
     validate_vision_config(config["vision"])
     server, camera = config["server"], config["camera"]

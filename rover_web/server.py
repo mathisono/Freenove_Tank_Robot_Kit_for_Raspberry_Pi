@@ -26,6 +26,7 @@ from . import __version__
 from .camera import CameraService
 from .control import RobotController
 from .hardware import FreenoveHardware, SimHardware
+from .status_led import BoardStatusLed
 from .vision import HSVBallDetector
 
 LOG = logging.getLogger(__name__)
@@ -115,6 +116,8 @@ class Console:
         self.peers: set = set()
         self.peer_expiry_tasks: set[asyncio.Task] = set()
         self.telemetry_task = None
+        self.status_led: BoardStatusLed | None = None
+        self.status_led_error: str | None = None
 
     @property
     def controller(self):
@@ -162,6 +165,8 @@ class Console:
         state.update(control_owned=bool(client and self.owner is client),
                      owner=self.owner.identity if self.owner else None,
                      search_available=False)
+        state["status_led"] = (self.status_led.status() if self.status_led else
+                               {"state": "unavailable", "s2_on": None, "error": self.status_led_error})
         return state
 
     def revoke(self, reason: str) -> None:
@@ -175,7 +180,23 @@ class Console:
             raise ValueError(result.get("reason", "Command rejected"))
 
     async def start(self, app: web.Application) -> None:
-        await asyncio.to_thread(self.runtime.start)
+        if not self.demo and self.config["status_led"]["enabled"]:
+            try:
+                self.status_led = BoardStatusLed.open(self.config["status_led"])
+                self.status_led.start()
+            except Exception as exc:
+                self.status_led_error = str(exc)
+                LOG.exception("Status LED unavailable; rover controls remain independent")
+                if self.status_led:
+                    self.status_led.close()
+                    self.status_led = None
+        try:
+            await asyncio.to_thread(self.runtime.start)
+        except BaseException:
+            if self.status_led:
+                self.status_led.close()
+                self.status_led = None
+            raise
         self.telemetry_task = asyncio.create_task(self.telemetry(), name="console-telemetry")
 
     async def close(self, app: web.Application) -> None:
@@ -188,7 +209,11 @@ class Console:
         await asyncio.gather(*self.peer_expiry_tasks, return_exceptions=True)
         await asyncio.gather(*(peer.close() for peer in list(self.peers)), return_exceptions=True)
         await asyncio.gather(*(client.ws.close(code=1001, message=b"Server stopping") for client in list(self.clients)), return_exceptions=True)
-        await asyncio.to_thread(self.runtime.stop)
+        try:
+            await asyncio.to_thread(self.runtime.stop)
+        finally:
+            if self.status_led:
+                await asyncio.to_thread(self.status_led.close)
 
     async def send_state(self, client: Client) -> None:
         try:
@@ -208,6 +233,10 @@ class Console:
         while True:
             if self.owner and (not self.video_fresh(self.owner) or not self.controller.snapshot().get("enabled")):
                 self.revoke("Video or control heartbeat expired")
+            if self.status_led:
+                self.status_led.set_web_state(
+                    connected=bool(self.clients),
+                    enabled=bool(self.owner and self.controller.snapshot().get("enabled")))
             if self.clients:
                 await asyncio.gather(*(self.send_state(client) for client in tuple(self.clients)))
             await asyncio.sleep(self.config["server"]["telemetry_interval_s"])
