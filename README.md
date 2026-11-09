@@ -1,100 +1,116 @@
-## Freenove Tank Robot Kit for Raspberry Pi
+# Rover Field Control
 
-<img src='Picture/icon.png' width='70%'/>
+A local browser console for Mathison's **Freenove FNK0077 Tank Robot Kit,
+V2.0 board and Raspberry Pi 4**. This development fork is based on
+[Freenove's original project](https://github.com/Freenove/Freenove_Tank_Robot_Kit_for_Raspberry_Pi)
+at commit `008139eee37d99ffc15766c7f2a04a9d8fc32849`.
 
-## PCB Version
+The original `Code/Server`, `Code/Client`, tutorials, and license are retained.
+The new application lives in `rover_web/`. The original README is preserved
+in [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 
-| PCB Version | PCB Picture |
-|-|-|
-| V1.0 | <img src='Picture/V1.0.jpg' width='45%' alt='V1.0'/> |
-| V2.0 | <img src='Picture/V2.0.jpg' width='45%' alt='V2.0'/> |
+## Features
 
-### Download
+- **Live video:** one Picamera2 instance, Pi 4 hardware H264 encoding, WebRTC
+  packet passthrough without software re-encoding. Defaults: 960×540 at
+  30 fps and 2 Mbps; independent vision at 320×180, up to 15 fps.
+- **Direct:** touch direction pad or WASD/arrows. Hold to move, release to
+  stop. Space and the large STOP control stop motion. Speed slider plus a
+  separate configured motor cap.
+- **Grab:** select a visible red ball, prepare the arm, align, approach using
+  camera and sonar, stop at a calibrated pickup position, close, lift, hold.
+  The close command stays latched until Release. No possession sensor exists;
+  “Grip held” does not prove a successful pickup.
+- **Release:** stop, lower, open. Available with driving/video disabled when
+  servo commissioning is complete and another browser does not own control.
+- **Search Mode — Coming soon:** reserved in the UI and rejected by the
+  server. Grab does not roam when no ball is visible.
+- **Responsive controls:** separate WebSocket, 25 Hz commands, one driver,
+  expiring command tickets, independent motor deadlines, bounded video queues.
+- **Stops:** stale/missing sensors, lost target, lost connection, expired
+  commands, or STOP halt travel. Stop freezes further arm/claw slew at the
+  last commanded position without automatically opening the gripper.
 
-* **Use command in console**
+Ball color, rotation, track polarity, servo endpoints, speed limits, and
+pickup geometry are configurable. Red is the kit-ball default, not a general
+ball detector. Servo movement and autonomous grabbing require measured
+commissioning settings. Direct driving requires fresh camera and sonar data,
+but does not require a ball.
 
-    Run following command to download all the files in this repository.
+## Desktop demo
 
-    `git clone --depth 1 https://github.com/Freenove/Freenove_Tank_Robot_Kit_for_Raspberry_Pi.git`
+Python 3.11 or newer:
 
-* **Manually download in browser**
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[desktop,test]'
+.venv/bin/python -m rover_web --demo
+```
 
-    Click the green "Clone or download" button, then click "Download ZIP" button in the pop-up window.
-    Do NOT click the "Open in Desktop" button, it will lead you to install Github software.
+Open `http://127.0.0.1:8080`. The DEMO label identifies synthetic video and
+simulated actuators. No Pi hardware libraries are opened. Uncalibrated Grab
+remains disabled, as it does on the real rover.
 
-> If you meet any difficulties, please contact our support team for help.
+## Raspberry Pi installation
 
-### Differences between PCB versions
-| Function | V1.0 | V2.0 |
-|-|-|-|
-| Servo | GPIO7 (Servo0), GPIO8 (Servo1) | GPIO12 (Servo0), GPIO13 (Servo1) |
-| Infrared | GPIO16 (IR01), GPIO20 (IR02), GPIO21 (IR03) | GPIO16 (IR01), GPIO26 (IR02), GPIO21 (IR03) |
-| Ultrasonic | GPIO27 (Trig), GPIO22 (Echo) | GPIO27 (Trig), GPIO22 (Echo) |
-| LedPixel | GPIO18 | GPIO10 (SPI) |
-| Motor | GPIO23 (M1+), GPIO24 (M1-), GPIO6 (M2+), GPIO5 (M2-) | GPIO23 (M1+), GPIO24 (M1-), GPIO6 (M2+), GPIO5 (M2-) |
+Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), then use
+[docs/OPENCLAW_DEPLOY_PROMPT.md](docs/OPENCLAW_DEPLOY_PROMPT.md) as the handoff.
+Deploy to a separate directory and retain the existing installation.
 
-### Note:
+```bash
+./scripts/install_rover.sh
+sudo ./scripts/install_service.sh
+```
 
- 1. For PCB V1.0, if you are using a Raspberry Pi 4, the code will automatically use the rpi_ws281x library to drive the LED. If you are using a Raspberry Pi 5, the LED cannot be used because the rpi_ws281x library is not supported on the Raspberry Pi 5.
- 2. For PCB V1.0, the code will automatically use the gpiozero library to drive the servos.
- 3. For PCB V2.0, hardware SPI is used to drive the LED, and hardware PWM is used to control the servos.
- 4. In the Trixie system, the pigpio library cannot be used, and some functions of the rpi library are also not available in the trixie system. Therefore, only the gpiozero library can be used to drive the servos, which may result in imperfect servo performance, occasionally causing jitter.
+These install dependencies and register a service. They do not start it,
+reboot, change camera overlays, or enable autonomous grabbing. Calibration
+and the access key live under `/etc/freenove-rover/`, outside Git. Never run
+both old and new camera/GPIO servers concurrently.
 
-### Recommendation:
+## Git fork and delivery
 
- 1. If your PCB version is V1.0, we recommend using it with a Raspberry Pi 4 for better performance. Using a Raspberry Pi 5 is also possible, but the performance will be slightly worse.
- 2. If your PCB version is V2.0, we recommend using it with a Raspberry Pi 4/5 for better performance.
- 
-### Support
+Branch: `rover-web`. Original repository remote: `upstream`.
 
-Freenove provides free and quick customer support. Including but not limited to:
+```bash
+./scripts/publish_fork.sh
+```
 
-* Quality problems of products
-* Using problems of products
-* Questions of learning and creation
-* Opinions and suggestions
-* Ideas and thoughts
+Run that on a computer with GitHub CLI already authenticated as `mathisono`.
+It creates/verifies the official-kit fork and pushes `rover-web` without force.
+It does not modify upstream or replace an unrelated repository.
 
-Please send an email to:
+The delivery's `rover-web.bundle` is an incremental Git bundle requiring the
+upstream commit above. `scripts/restore_bundle.sh BUNDLE_PATH NEW_DIRECTORY`
+clones upstream, verifies prerequisites, imports the branch, and refuses to
+overwrite an existing directory. GitHub publication is separate from a local
+Git fork; consult the delivery manifest for publication status.
 
-[support@freenove.com](mailto:support@freenove.com)
+## Tests and implementation notes
 
-We will reply to you within one working day.
+```bash
+.venv/bin/python -m pytest -q
+npm ci --ignore-scripts
+npm run test:ui
+```
 
-### Purchase
+Node is needed only for UI tests; the rover serves its assets through Python.
+See [docs/VALIDATION.md](docs/VALIDATION.md) for results and verification limits,
+and [docs/WEB_PROTOCOL.md](docs/WEB_PROTOCOL.md) for messages and endpoints.
 
-Please visit the following page to purchase our products:
+The Pi 4 encoder adapter explicitly requests constrained baseline/level 3.1
+through standard V4L2 controls and validates actual SPS/PPS output. Incompatible
+encoder APIs or output produce a camera error and block movement. The adapter
+was checked against Picamera2 0.3.39; actual installed camera/OS compatibility
+must be verified on the rover.
 
-http://store.freenove.com
+This first release targets a reachable LAN. It does not configure public
+access, router ports, STUN/TURN, mapping, or Search. No measured end-to-end
+video latency is claimed before physical acceptance testing.
 
-Business customers please contact us through the following email address:
+## Attribution and license
 
-[sale@freenove.com](mailto:sale@freenove.com)
-
-### Copyright
-
-All the files in this repository are released under [Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License](http://creativecommons.org/licenses/by-nc-sa/3.0/).
-
-![markdown](https://i-blog.csdnimg.cn/img_convert/7d756cd74076aab6d9bc50a43fd4adbf.png)
-
-This means you can use them on your own derived works, in part or completely. But NOT for the purpose of commercial use.
-You can find a copy of the license in this repository.
-
-Freenove brand and logo are copyright of Freenove Creative Technology Co., Ltd. Can't be used without formal permission.
-
-### About
-
-Freenove is an open-source electronics platform.
-
-Freenove is committed to helping customers quickly realize creative ideas and product prototypes, making it easy to get started for enthusiasts of programming and electronics and launching innovative open source products.
-
-Our services include:
-
-* Robot kits
-* Learning kits for Arduino, Raspberry Pi, and micro:bit
-* Electronic components and modules, tools
-* Product customization service
-
-Our code and circuit are open source. You can obtain the details and the latest information through visiting the following website:
-
-http://www.freenove.com
+Original software/hardware mapping: Freenove. This fork adds the browser UI,
+streaming service, control adapter, pickup controller, tests, and deployment
+tools. The original [CC BY-NC-SA 3.0 license](LICENSE.txt) is retained for this
+derived project. Dependencies retain their own licenses. This is not an
+official Freenove release.

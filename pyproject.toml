@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freenove-rover-web"
+version = "0.1.0"
+description = "Local WebRTC driving console and ball pickup for the Freenove FNK0077 V2 rover"
+requires-python = ">=3.11"
+dependencies = ["aiohttp>=3.11,<4", "aiortc>=1.14,<2", "numpy>=1.24,<3"]
+
+[project.optional-dependencies]
+desktop = ["opencv-python-headless>=4.8,<6"]
+test = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2"]
+hardware = ["gpiozero>=2,<3", "rpi-hardware-pwm>=0.2,<1"]
+
+[project.scripts]
+rover-web = "rover_web.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["rover_web*"]
+
+[tool.setuptools.package-data]
+rover_web = ["static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

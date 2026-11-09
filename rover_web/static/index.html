@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#111513">
+  <title>Rover · Field Control</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="m7 11 5-5 5 5M12 6v12"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M19 12a7 7 0 0 0-12-5L4 10m16 4-3 3a7 7 0 0 1-12-5"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></symbol>
+    <symbol id="i-claw" viewBox="0 0 24 24"><path d="M12 3v5M7 8h10M7 8l-3 6 4 5m9-11 3 6-4 5M8 19l2-2m6 2-2-2"/></symbol>
+  </svg>
+
+  <div class="shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Rover field control home">
+        <svg class="rover-mark" viewBox="0 0 40 36" aria-hidden="true"><rect x="3" y="5" width="8" height="26" rx="4"/><rect x="29" y="5" width="8" height="26" rx="4"/><path d="M11 11h18v14H11zM17 11V5h6v6"/><circle cx="20" cy="18" r="2"/></svg>
+        <span><span class="brand-name">ROVER<span class="brand-slash"> / </span><span class="brand-id">01</span></span><span class="brand-caption">FREENOVE · FIELD CONTROL</span></span>
+      </a>
+      <div class="top-status">
+        <span id="demoBadge" class="demo-badge" hidden>SIMULATION</span>
+        <span class="connection-pill" id="connectionPill"><span class="status-dot"></span><span id="connectionLabel">Connecting</span></span>
+        <button id="reconnectButton" class="icon-button" type="button" title="Reconnect video and controls" aria-label="Reconnect video and controls"><svg><use href="#i-refresh"/></svg></button>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-heading" aria-label="Overview">
+        <div><p class="eyebrow">OPERATOR CONSOLE</p><h1>A clear view. Full control.</h1></div>
+        <p class="session-label"><span class="tiny-cross">+</span> LOCAL ROVER LINK</p>
+      </section>
+
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+
+      <div class="dashboard">
+        <section class="vision-panel panel" aria-labelledby="visionTitle">
+          <div class="panel-heading"><div><span class="section-number">01</span><h2 id="visionTitle">Live view</h2></div><span class="subtle-label" id="videoFormat">WAITING FOR CAMERA</span></div>
+          <div class="video-stage" id="videoStage">
+            <video id="roverVideo" autoplay playsinline muted aria-label="Live camera view from the rover"></video>
+            <canvas id="targetOverlay" aria-hidden="true"></canvas>
+            <div class="video-grid" id="videoGrid" aria-hidden="true"></div>
+            <div class="video-empty" id="videoEmpty"><span class="camera-glyph"><svg><use href="#i-eye"/></svg></span><h3 id="videoEmptyTitle">Connecting to your rover</h3><p id="videoEmptyText">The live camera feed will appear here.</p></div>
+            <div class="video-topline"><span id="liveBadge" class="video-badge"><span class="status-dot"></span><span id="liveLabel">CAMERA OFFLINE</span></span><span class="video-badge mode-badge">DIRECT</span></div>
+            <div class="aim-reticle" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+            <div class="video-bottomline"><span id="targetLabel">NO TARGET LOCK</span><button id="fullscreenButton" class="icon-button video-expand" type="button" aria-label="Expand live view" title="Expand live view"><svg><use href="#i-expand"/></svg></button></div>
+          </div>
+          <div class="telemetry" aria-label="Live telemetry">
+            <div class="metric"><span class="metric-name">FRONT DISTANCE</span><span class="metric-value"><span id="distanceValue">—</span><small>cm</small></span><span id="distanceNote" class="metric-note">Awaiting sensor</span></div>
+            <div class="metric"><span class="metric-name">CONTROL RTT</span><span class="metric-value"><span id="latencyValue">—</span><small>ms</small></span><span class="metric-note">Browser ↔ rover</span></div>
+            <div class="metric"><span class="metric-name">VIDEO RATE</span><span class="metric-value"><span id="fpsValue">—</span><small>fps</small></span><span class="metric-note">Decoded in browser</span></div>
+          </div>
+          <div class="camera-footer"><span><span id="cameraStatusDot" class="status-dot"></span><span id="cameraStatusText">Camera connecting</span></span><span id="visionStatus">Vision standing by</span></div>
+        </section>
+
+        <aside class="control-column" aria-label="Rover controls">
+          <section class="panel mode-panel" aria-labelledby="modeTitle">
+            <div class="panel-heading"><div><span class="section-number">02</span><h2 id="modeTitle">Navigation</h2></div><span class="subtle-label">MODE</span></div>
+            <div class="mode-options" role="group" aria-label="Navigation mode">
+              <button class="mode-option selected" id="directMode" type="button" aria-pressed="true"><span class="mode-option-top"><span class="mode-orbit"></span><strong>Direct</strong><span class="selected-dot"></span></span><span class="mode-description">You're in the driver's seat</span></button>
+              <button class="mode-option unavailable" type="button" disabled aria-disabled="true"><span class="mode-option-top"><svg><use href="#i-eye"/></svg><strong>Search Mode</strong><svg class="mode-lock"><use href="#i-lock"/></svg></span><span class="mode-description">Coming soon</span></button>
+            </div>
+          </section>
+
+          <section class="panel drive-panel" aria-labelledby="driveTitle">
+            <div class="panel-heading"><div><span class="section-number">03</span><h2 id="driveTitle">Drive</h2></div><span class="control-state" id="controlState">DISABLED</span></div>
+            <button class="enable-button" id="enableButton" type="button" disabled><span class="status-dot"></span><span id="enableLabel">Enable controls</span></button>
+            <div class="drive-pad" id="drivePad" role="group" aria-label="Hold to drive the rover">
+              <button class="drive-button drive-up" type="button" data-drive="forward" aria-label="Hold to drive forward" disabled><svg><use href="#i-arrow"/></svg><kbd>W</kbd></button>
+              <button class="drive-button drive-left" type="button" data-drive="left" aria-label="Hold to turn left" disabled><svg><use href="#i-arrow"/></svg><kbd>A</kbd></button>
+              <div class="drive-center" aria-hidden="true"><span class="pad-dot"></span><span>HOLD<br>TO DRIVE</span></div>
+              <button class="drive-button drive-right" type="button" data-drive="right" aria-label="Hold to turn right" disabled><svg><use href="#i-arrow"/></svg><kbd>D</kbd></button>
+              <button class="drive-button drive-down" type="button" data-drive="backward" aria-label="Hold to drive backward" disabled><svg><use href="#i-arrow"/></svg><kbd>S</kbd></button>
+            </div>
+            <div class="speed-control"><label for="speedLimit">Drive speed <output id="speedValue" for="speedLimit">35%</output></label><input id="speedLimit" type="range" min="15" max="70" step="5" value="35" aria-label="Drive speed limit"><div class="range-labels"><span>PRECISE</span><span>QUICK</span></div></div>
+            <p class="control-hint">Hold a direction or use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>. Release to stop.</p>
+          </section>
+        </aside>
+
+        <section class="panel claw-panel" aria-labelledby="clawTitle">
+          <div class="claw-main"><div class="claw-heading"><span class="claw-symbol"><svg><use href="#i-claw"/></svg></span><div><p class="eyebrow">BALL RETRIEVAL</p><h2 id="clawTitle">Claw control</h2></div></div><p class="claw-description">Grab aligns with the ball, approaches, and closes the claw. Release cancels the approach and opens it.</p><div class="claw-toggle" role="group" aria-label="Claw action"><button id="grabButton" type="button" aria-pressed="false" disabled><svg><use href="#i-claw"/></svg>Grab</button><button id="releaseButton" type="button" aria-pressed="false" disabled>Release <span aria-hidden="true">↗</span></button></div></div>
+          <div class="claw-progress"><span class="metric-name">RETRIEVAL STATUS</span><div class="retrieval-state"><span id="retrievalDot" class="status-dot"></span><strong id="retrievalLabel">Standing by</strong></div><p id="retrievalDetail">Enable controls to begin.</p><div class="progress-steps" aria-label="Retrieval progress"><span data-step="target">Find ball</span><i></i><span data-step="approach">Approach</span><i></i><span data-step="grip">Grip</span></div></div>
+        </section>
+
+        <section class="stop-panel" aria-label="Stop controls"><button id="stopButton" class="stop-button" type="button"><span><svg><use href="#i-stop"/></svg>STOP ROVER</span><kbd>SPACE</kbd></button><p>Stops movement and cancels retrieval.<br>The claw command is held until Release.</p></section>
+      </div>
+
+      <footer class="page-footer"><span><span class="status-dot"></span>FREENOVE V2.0</span><span>DIRECT CONTROL · LOCAL VISION</span><span id="footerStatus">No active control session</span></footer>
+    </main>
+  </div>
+
+  <dialog id="loginDialog" class="login-dialog" aria-labelledby="loginTitle">
+    <form id="loginForm"><span class="login-symbol"><svg><use href="#i-lock"/></svg></span><p class="eyebrow">YOUR ROVER, YOUR CONTROLS</p><h2 id="loginTitle">Connect to the rover</h2><p>Enter the access key configured on your rover.</p><label for="accessKey">Rover access key</label><input id="accessKey" type="password" name="token" required autocomplete="current-password" placeholder="Enter access key"><p id="loginError" class="login-error" role="alert" hidden></p><button id="loginButton" class="enable-button" type="submit">Connect</button></form>
+  </dialog>
+  <div id="announcer" class="sr-only" aria-live="polite"></div>
+</body>
+</html>

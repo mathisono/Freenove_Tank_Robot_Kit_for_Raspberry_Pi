@@ -1,0 +1,16 @@
+.venv/
+.venv-*/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.env
+*.local.json
+*.token
+*.log
+artifacts/
+playwright-report/
+test-results/
+node_modules/

@@ -1,0 +1,15 @@
+{
+  "name": "freenove-rover-ui-checks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Development-only DOM and protocol checks with mocked video, WebSocket, and rover state. The rover application does not require Node.js.",
+  "scripts": {
+    "test:ui": "node tests/ui/check.cjs"
+  },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "devDependencies": {
+    "jsdom": "31.0.0"
+  }
+}

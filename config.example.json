@@ -1,0 +1,128 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "max_viewers": 3,
+    "ticket_ttl_s": 0.5,
+    "telemetry_interval_s": 0.1,
+    "session_ttl_s": 43200
+  },
+  "camera": {
+    "width": 960,
+    "height": 540,
+    "fps": 30,
+    "bitrate": 2000000,
+    "vision_size": [
+      320,
+      180
+    ],
+    "vision_fps": 15,
+    "rotation180": true,
+    "stale_after": 0.75
+  },
+  "hardware": {
+    "board_version": 2,
+    "left_forward_gpio": 24,
+    "left_backward_gpio": 23,
+    "right_forward_gpio": 5,
+    "right_backward_gpio": 6,
+    "left_inverted": false,
+    "right_inverted": false,
+    "motor_lease_s": 0.3,
+    "ultrasonic_trigger_gpio": 27,
+    "ultrasonic_echo_gpio": 22,
+    "ultrasonic_timeout_s": 0.025,
+    "ultrasonic_max_cm": 250.0,
+    "pwm_chip": 0,
+    "gripper_pwm_channel": 0,
+    "arm_pwm_channel": 1,
+    "servo_calibrated": false,
+    "gripper_min_angle": 90.0,
+    "gripper_max_angle": 150.0,
+    "gripper_open_angle": 90.0,
+    "gripper_closed_angle": 145.0,
+    "gripper_inverted": false,
+    "arm_min_angle": 90.0,
+    "arm_max_angle": 150.0,
+    "arm_pickup_angle": 95.0,
+    "arm_carry_angle": 135.0,
+    "arm_inverted": false,
+    "servo_slew_deg_s": 60.0
+  },
+  "control": {
+    "tick_hz": 30.0,
+    "manual_max_speed": 0.4,
+    "auto_approach_speed": 0.14,
+    "auto_creep_speed": 0.08,
+    "auto_turn_speed": 0.14,
+    "steering_kp": 0.65,
+    "manual_timeout_s": 0.3,
+    "heartbeat_timeout_s": 0.65,
+    "vision_max_age_s": 0.5,
+    "range_max_age_s": 0.35,
+    "range_poll_s": 0.08,
+    "target_lost_timeout_s": 0.4,
+    "acquire_timeout_s": 3.0,
+    "autonomy_timeout_s": 25.0,
+    "alignment_tolerance": 0.06,
+    "alignment_frames": 3,
+    "close_range_samples": 3,
+    "approach_slowdown_cm": 12.0,
+    "min_clearance_cm": 6.0,
+    "grasp_stop_cm": null,
+    "grasp_range_tolerance_cm": 2.0,
+    "grasp_x": 0.5,
+    "grasp_y": 0.6,
+    "grasp_y_tolerance": 0.25,
+    "grasp_min_radius": 0.04,
+    "grasp_max_radius": 0.35,
+    "target_confidence_min": 0.6,
+    "autonomy_calibrated": false,
+    "require_geometry_check": true,
+    "ball_diameter_cm": null,
+    "camera_focal_length_norm": null,
+    "camera_to_sonar_cm": 0.0,
+    "geometry_tolerance_cm": 10.0,
+    "geometry_relative_tolerance": 0.45,
+    "prepare_s": 1.2,
+    "grip_settle_s": 1.2,
+    "lift_settle_s": 1.2,
+    "release_lower_s": 1.2,
+    "release_open_s": 1.2
+  },
+  "vision": {
+    "hsv_ranges": [
+      [
+        [
+          0,
+          110,
+          65
+        ],
+        [
+          12,
+          255,
+          255
+        ]
+      ],
+      [
+        [
+          168,
+          110,
+          65
+        ],
+        [
+          179,
+          255,
+          255
+        ]
+      ]
+    ],
+    "min_area_px": 90,
+    "min_radius_px": 6,
+    "max_radius_fraction": 0.4,
+    "min_circularity": 0.56,
+    "min_fill": 0.58,
+    "track_match_distance": 0.24,
+    "track_lost_after_s": 0.75
+  }
+}
