@@ -93,6 +93,21 @@ class ControllerTests(unittest.TestCase):
         finally:
             controller.shutdown()
 
+    def test_standby_only_raises_claw_without_unlocking_grab_or_release(self):
+        hardware = SimHardware({"standby_calibrated": True}, clock=self.clock)
+        controller = RobotController({}, hardware, clock=self.clock, autostart=False)
+        try:
+            self.assertEqual(hardware.events, [("grip", "standby"), ("arm", "standby")])
+            self.assertEqual(controller.snapshot()["standby_state"], "commanded")
+            self.assertTrue(controller.snapshot()["standby_calibrated"])
+            self.assertFalse(controller.snapshot()["manipulator_calibrated"])
+            with self.assertRaisesRegex(RuntimeError, "calibration"):
+                hardware.grip(True)
+            with self.assertRaisesRegex(RuntimeError, "calibration"):
+                hardware.arm("pickup")
+        finally:
+            controller.shutdown()
+
     def test_physical_drive_waits_for_standby_settle(self):
         self.hardware.simulated = False
         self.control.set_enabled(True)

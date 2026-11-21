@@ -188,8 +188,8 @@
     // Release is a non-driving action. The server permits the owner, or an
     // observer when there is no owner, to stop and open the claw without video.
     $("releaseButton").disabled = !linked || !ticket || (controlBusy() && !owned) || currentPhase() === "releasing";
-    $("standbyButton").disabled = !linked || !ticket || (controlBusy() && !owned) || state.manipulator_calibrated !== true;
-    $("standbyButton").title = state.manipulator_calibrated !== true ? "Commission the gripper and arm servo angles first" : "Raise the arm for driving; keep a held grip closed";
+    $("standbyButton").disabled = !linked || !ticket || (controlBusy() && !owned) || state.standby_calibrated !== true;
+    $("standbyButton").title = state.standby_calibrated !== true ? "Commission the gripper and arm standby angles first" : "Raise the arm for driving; keep a held grip closed";
     $("standbyStatus").textContent = state.standby_state === "moving" ? "Moving to standby; tracks held stopped." :
       state.standby_state === "commanded" ? state.grip_closed === true ? "Arm commanded to standby; grip held closed." : "Claw commanded to standby." :
       state.standby_state === "unavailable" ? "Standby unavailable until servo angles are commissioned." : "Claw is away from standby.";

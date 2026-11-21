@@ -145,6 +145,7 @@ Default values are starting limits, not measurements of this rover:
 | Setting | Initial value / required observation |
 | --- | --- |
 | `hardware.servo_calibrated` | false until travel and endpoints are checked |
+| `hardware.standby_calibrated` | false until the 90°/140° raised standby pose and travel are checked; does not enable Grab/Release |
 | Gripper open / closed | 90° / 145°, within 90–150° bounds |
 | Arm pickup / carry | 95° / 135°, within 90–150° bounds |
 | Gripper / arm standby | Nominal 90° open / 140° raised from original Freenove startup; verify on this rover |
@@ -157,7 +158,7 @@ Default values are starting limits, not measurements of this rover:
 
 Use the original working endpoints as evidence and verify them with the
 tracks lifted. Nominal angles do not prove linkage clearance. Once
-`servo_calibrated=true`, startup commands the configured standby pose and
+`standby_calibrated=true` or `servo_calibrated=true`, startup commands the configured standby pose and
 manual driving commands it again before tracks move. A closed gripper stays
 closed when driving so a held object cannot be dropped; Release remains the
 only way to open it. The GUI also has an explicit standby command and shows
@@ -168,9 +169,11 @@ The first servo command can move immediately.
 Later targets slew at the configured rate. Stop freezes further slew while
 retaining the last pulse; it does not open the claw.
 
-Never use autonomous driving to discover servo endpoints. After safe endpoints
-are known, set `servo_calibrated=true` to permit startup standby, drive standby,
-explicit Standby/Release commands. Keep `autonomy_calibrated=false` while measuring geometry. Do not
+Never use autonomous driving to discover servo endpoints. After verifying just
+the standby travel, `standby_calibrated=true` permits startup, drive, and
+explicit Standby commands while keeping Grab/Release locked. Only after full
+gripper and arm endpoints are verified, set `servo_calibrated=true` for Grab/Release.
+Keep `autonomy_calibrated=false` while measuring geometry. Do not
 change calibration flags merely to unlock buttons.
 
 For a centered ball at known camera-to-center distance Z, image diameter d

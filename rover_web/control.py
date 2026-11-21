@@ -138,7 +138,7 @@ class RobotController:
         self._last_close_sample = None
         self._release_opened = False
         self.hardware.stop()
-        if self.hardware.manipulator_ready:
+        if self.hardware.standby_ready:
             try:
                 self._prepare_standby()
                 self._reason = "Claw commanded to standby at startup; tracks stopped"
@@ -228,7 +228,7 @@ class RobotController:
             if enabled:
                 self._heartbeat_at = self.clock()
                 self._phase = "holding" if self._grip_closed else "idle"
-                if self.hardware.manipulator_ready:
+                if self.hardware.standby_ready:
                     try:
                         self._prepare_standby()
                     except Exception as exc:
@@ -284,7 +284,7 @@ class RobotController:
             needs_standby = not self._standby_commanded or replacing_auto
             if replacing_auto:
                 self._cancel_auto()
-            if needs_standby and self.hardware.manipulator_ready:
+            if needs_standby and self.hardware.standby_ready:
                 try:
                     self._prepare_standby()
                 except Exception as exc:
@@ -318,7 +318,7 @@ class RobotController:
             self._halt()
             self._cancel_auto()
             self._standby_commanded = False
-            if not self.hardware.manipulator_ready:
+            if not self.hardware.standby_ready:
                 self._reason = "Claw standby needs commissioned servo angles"
                 return self._result(False)
             try:
@@ -635,7 +635,8 @@ class RobotController:
                 "enabled": self._enabled, "mode": "direct", "phase": self._phase,
                 "grip_closed": self._grip_closed, "possession_confirmed": False,
                 "manipulator_calibrated": bool(self.hardware.manipulator_ready),
-                "standby_state": ("unavailable" if not self.hardware.manipulator_ready else
+                "standby_calibrated": bool(self.hardware.standby_ready),
+                "standby_state": ("unavailable" if not self.hardware.standby_ready else
                                   "other" if not self._standby_commanded else
                                   "moving" if self._standby_until is not None and now < self._standby_until else
                                   "commanded"),

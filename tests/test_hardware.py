@@ -115,9 +115,11 @@ class HardwareTests(unittest.TestCase):
         self.assertEqual(self.hardware._pwm, {})
 
     def test_standby_commands_gripper_and_arm_on_original_pwm_channels(self):
-        self.hardware.config["servo_calibrated"] = True
+        self.hardware.config["standby_calibrated"] = True
         with patch.dict(sys.modules, {"rpi_hardware_pwm": types.SimpleNamespace(HardwarePWM=FakePWM)}):
             self.hardware.standby()
+            with self.assertRaisesRegex(RuntimeError, "commissioning"):
+                self.hardware.grip(False)
             self.assertEqual(self.hardware._servo_targets, {"gripper": 90.0, "arm": 140.0})
             self.assertEqual(self.hardware._pwm["gripper"].channel, 0)
             self.assertEqual(self.hardware._pwm["arm"].channel, 1)
@@ -140,7 +142,7 @@ class HardwareTests(unittest.TestCase):
 
     def test_short_standby_settle_is_rejected_for_commissioned_hardware(self):
         config = default_config()
-        config["hardware"]["servo_calibrated"] = True
+        config["hardware"]["standby_calibrated"] = True
         config["control"]["standby_settle_s"] = 0.1
         with self.assertRaisesRegex(ValueError, "standby_settle_s"):
             validate_config(config)
