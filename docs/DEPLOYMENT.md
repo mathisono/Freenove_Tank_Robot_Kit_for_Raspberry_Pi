@@ -128,9 +128,9 @@ do not disable validation to make a connection appear successful.
 
 For first motor checks lift the tracks clear, supervise locally, enable S2,
 and use low speed. Verify forward/reverse/left/right; adjust only the required
-`left_inverted`/`right_inverted` setting. Direct drive needs fresh camera and
-valid sonar even without a ball. During a raised-track test point the sonar
-at an object in range. No echo is missing data, never an invented clear path.
+`left_inverted`/`right_inverted` setting. Direct drive needs fresh camera but
+does not use sonar as a motion interlock. A missing echo remains invalid data
+for automatic Grab, not an invented clear path.
 Check release-to-stop, Space, STOP, tab hiding, Wi-Fi loss, and camera stalls.
 Reconnection must not resume motion automatically.
 
@@ -145,8 +145,11 @@ Default values are starting limits, not measurements of this rover:
 | Setting | Initial value / required observation |
 | --- | --- |
 | `hardware.servo_calibrated` | false until travel and endpoints are checked |
+| `hardware.standby_calibrated` | false until the 90°/140° raised standby pose and travel are checked; does not enable Grab/Release |
+| `hardware.manual_servo_enabled` | false until the operator is present to supervise explicit Set commands within configured travel limits |
 | Gripper open / closed | 90° / 145°, within 90–150° bounds |
 | Arm pickup / carry | 95° / 135°, within 90–150° bounds |
+| Gripper / arm standby | Nominal 90° open / 140° raised from original Freenove startup; verify on this rover |
 | `control.autonomy_calibrated` | false until complete pickup is commissioned |
 | `control.grasp_stop_cm` | sonar reading with ball correctly inside open claw |
 | `control.ball_diameter_cm` | measured diameter of the actual ball |
@@ -155,14 +158,33 @@ Default values are starting limits, not measurements of this rover:
 | `control.camera_to_sonar_cm` | signed axial offset: positive when sonar is in front of the camera toward the ball; negative when behind |
 
 Use the original working endpoints as evidence and verify them with the
-tracks lifted. Nominal angles do not prove linkage clearance. The first
-explicit servo command can move immediately: there is no position feedback.
+tracks lifted. Nominal angles do not prove linkage clearance. Once
+`standby_calibrated=true` or `servo_calibrated=true`, startup commands the configured standby pose and
+manual driving commands it again before tracks move. A closed gripper stays
+closed when driving so a held object cannot be dropped; Release or an explicit
+manual Set can open it. The GUI also has an explicit standby command and shows
+whether the pose is unavailable, moving, or commanded. A fixed settling
+interval (default 1.2 s) holds the tracks stopped, but there is no servo
+position feedback: a reported standby pose is a command, not verification.
+The first servo command can move immediately.
 Later targets slew at the configured rate. Stop freezes further slew while
 retaining the last pulse; it does not open the claw.
 
-Never use autonomous driving to discover servo endpoints. After safe endpoints
-are known, set `servo_calibrated=true` to permit explicit Release/manipulator
-commands. Keep `autonomy_calibrated=false` while measuring geometry. Do not
+With `manual_servo_enabled=true`, the GUI exposes separate gripper and arm
+angle sliders and a Set button. Moving a slider alone never sends a command.
+Set stops tracks, then commands both angles within the configured 90–150°
+limits. The GUI reports the last commanded targets, not actual measured servo
+positions. Set atomically saves both targets as the automatic boot/driving
+standby in the configured JSON file; the rover service must have write access
+to that file. Save failures stop controls and appear in the GUI. Confirm the
+physical pose is safe before using it for standby. Direct drive ignores sonar
+range, including close and missing echoes; automatic Grab still requires it.
+
+Never use autonomous driving to discover servo endpoints. After verifying just
+the standby travel, `standby_calibrated=true` permits startup, drive, and
+explicit Standby commands while keeping Grab/Release locked. Only after full
+gripper and arm endpoints are verified, set `servo_calibrated=true` for Grab/Release.
+Keep `autonomy_calibrated=false` while measuring geometry. Do not
 change calibration flags merely to unlock buttons.
 
 For a centered ball at known camera-to-center distance Z, image diameter d

@@ -33,16 +33,23 @@ Client messages:
 {"type":"drive","ticket":"LATEST","seq":2,"throttle":0.3,"steering":0.1}
 {"type":"action","ticket":"LATEST","action":"grab"}
 {"type":"action","ticket":"LATEST","action":"release"}
+{"type":"action","ticket":"LATEST","action":"set_pose","gripper_angle":100,"arm_angle":140}
 {"type":"action","action":"stop"}
 {"type":"action","ticket":"LATEST","action":"disable"}
 {"type":"ping","sent_at":12345.67}
 ```
 
+`set_pose` stops tracks, commands both bounded servo targets, and saves them
+as the boot/driving standby in the configured local JSON file. The state
+reports commanded targets, not measured servo position.
+
 Drive values are normalized -1..1; positive steering turns right. Motor output
 is scaled by the configured speed cap. Drive sequence numbers must increase
 for that WebSocket. A nonzero Direct command overrides a Grab sequence. A
 zero drive command stops tracks and cancels approach; do not send idle zeros
-continuously while Grab is active.
+continuously while Grab is active. Direct drive ignores close, stale, and
+missing sonar readings; the sonar display is informational. Automatic Grab
+still requires valid range readings.
 
 Heartbeat interval is 150 ms. `video_ok` means actual displayed video frames
 are still arriving, not just that the WebRTC connection says “connected”.

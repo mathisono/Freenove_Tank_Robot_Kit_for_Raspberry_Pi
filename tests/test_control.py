@@ -34,6 +34,7 @@ class ControllerTests(unittest.TestCase):
             "release_open_s": 0.1,
         }, self.hardware, clock=self.clock, autostart=False)
         self.control.set_enabled(True)
+        self.hardware.events.clear()  # Ignore the two expected boot/enable standby commands.
         self.fresh()
 
     def tearDown(self):
@@ -68,6 +69,58 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(self.control.drive(1, 1)["ok"])
         self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
 
+    def test_commissioned_startup_commands_open_gripper_and_raised_arm(self):
+        hardware = SimHardware({"servo_calibrated": True}, clock=self.clock)
+        controller = RobotController({}, hardware, clock=self.clock, autostart=False)
+        try:
+            self.assertEqual(hardware.events, [("grip", "standby"), ("arm", "standby")])
+            self.assertEqual(controller.snapshot()["standby_state"], "commanded")
+            self.assertEqual((hardware.left, hardware.right), (0, 0))
+        finally:
+            controller.shutdown()
+
+    def test_uncommissioned_startup_keeps_servos_off_and_direct_drive_available(self):
+        hardware = SimHardware({}, clock=self.clock)
+        controller = RobotController({}, hardware, clock=self.clock, autostart=False)
+        try:
+            self.assertEqual(hardware.events, [])
+            self.assertEqual(controller.snapshot()["standby_state"], "unavailable")
+            controller.set_enabled(True)
+            controller.update_vision(BallObservation(captured_at=self.clock()))
+            controller.update_range(60, self.clock())
+            self.assertTrue(controller.drive(1, 1)["ok"])
+            self.assertGreater(hardware.left, 0)
+        finally:
+            controller.shutdown()
+
+    def test_standby_only_raises_claw_without_unlocking_grab_or_release(self):
+        hardware = SimHardware({"standby_calibrated": True}, clock=self.clock)
+        controller = RobotController({}, hardware, clock=self.clock, autostart=False)
+        try:
+            self.assertEqual(hardware.events, [("grip", "standby"), ("arm", "standby")])
+            self.assertEqual(controller.snapshot()["standby_state"], "commanded")
+            self.assertTrue(controller.snapshot()["standby_calibrated"])
+            self.assertFalse(controller.snapshot()["manipulator_calibrated"])
+            with self.assertRaisesRegex(RuntimeError, "calibration"):
+                hardware.grip(True)
+            with self.assertRaisesRegex(RuntimeError, "calibration"):
+                hardware.arm("pickup")
+        finally:
+            controller.shutdown()
+
+    def test_physical_drive_waits_for_standby_settle(self):
+        self.hardware.simulated = False
+        self.control.set_enabled(True)
+        self.fresh()
+        self.assertEqual(self.control.snapshot()["standby_state"], "moving")
+        self.assertTrue(self.control.drive(1, 1)["ok"])
+        self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
+        self.clock.advance(1.2)
+        self.fresh()
+        self.assertEqual(self.control.snapshot()["standby_state"], "commanded")
+        self.assertTrue(self.control.drive(1, 1)["ok"])
+        self.assertGreater(self.hardware.left, 0)
+
     def test_manual_is_capped_and_needs_no_detected_ball(self):
         self.fresh(valid=False)
         self.assertTrue(self.control.drive(9, -9)["ok"])
@@ -97,24 +150,58 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(self.control.drive(1, 1)["ok"])
         self.assertIn("Camera", self.control.snapshot()["reason"])
 
-    def test_stale_range_stops_direct_control(self):
+    def test_stale_range_does_not_stop_direct_control(self):
         self.clock.advance(0.4)
         self.control.heartbeat()
         self.control.update_vision(BallObservation(captured_at=self.clock()))
-        self.assertFalse(self.control.drive(1, 1)["ok"])
-        self.assertIn("range is stale", self.control.snapshot()["reason"])
+        self.assertTrue(self.control.drive(1, 1)["ok"])
+        self.assertTrue(self.control.snapshot()["enabled"])
+        self.assertGreater(self.hardware.left, 0)
 
-    def test_missing_echo_does_not_become_clear_path(self):
+    def test_missing_echo_does_not_stop_direct_control(self):
         self.control.update_range(None)
-        self.assertFalse(self.control.drive(1, 1)["ok"])
-        self.assertEqual(self.hardware.left, 0)
+        self.assertTrue(self.control.drive(1, 1)["ok"])
+        self.assertTrue(self.control.snapshot()["enabled"])
+        self.assertGreater(self.hardware.left, 0)
+        self.assertIsNone(self.control.snapshot()["distance_cm"])
 
-    def test_forward_clearance_interlock_allows_manual_back_away(self):
+    def test_close_sonar_does_not_stop_direct_forward_or_reverse(self):
         self.fresh(distance=4)
-        self.assertFalse(self.control.drive(1, 1)["ok"])
-        self.control.set_enabled(True)
+        self.assertTrue(self.control.drive(1, 1)["ok"])
+        self.assertTrue(self.control.snapshot()["enabled"])
+        self.assertGreater(self.hardware.left, 0)
         self.assertTrue(self.control.drive(-1, -1)["ok"])
         self.assertLess(self.hardware.left, 0)
+
+    def test_missing_echo_still_stops_automatic_grab(self):
+        self.reach_approach()
+        self.control.update_range(None, self.clock())
+        self.control.tick()
+        self.assertFalse(self.control.snapshot()["enabled"])
+        self.assertIn("ultrasonic echo", self.control.snapshot()["reason"])
+        self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
+
+    def test_manual_pose_requires_opt_in_and_preserves_nonopen_grip_for_drive(self):
+        self.assertFalse(self.control.set_manual_pose(120, 150)["ok"])
+        self.assertEqual(self.hardware.events, [])
+        self.hardware.config["manual_servo_enabled"] = True
+        self.assertFalse(self.control.set_manual_pose(120, 151)["ok"])
+        self.assertEqual(self.hardware.events, [])
+        self.assertTrue(self.control.set_manual_pose(120, 150)["ok"])
+        self.assertEqual(self.hardware.events, [("pose", 120.0, 150.0)])
+        self.assertEqual(self.control.snapshot()["servo_target"], {"gripper": 120.0, "arm": 150.0})
+        self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
+        self.assertTrue(self.control.snapshot()["grip_closed"])
+        self.fresh(distance=4)
+        self.assertTrue(self.control.drive(-1, -1)["ok"])
+        self.assertEqual(self.hardware.events[-1], ("arm", "standby"))
+
+    def test_manual_pose_can_open_gripper_while_drive_disabled(self):
+        self.hardware.config["manual_servo_enabled"] = True
+        self.control.set_enabled(False)
+        self.assertTrue(self.control.set_manual_pose(90, 150)["ok"])
+        self.assertFalse(self.control.snapshot()["enabled"])
+        self.assertFalse(self.control.snapshot()["grip_closed"])
 
     def test_nan_drive_stops_both_tracks(self):
         self.control.drive(1, 1)
@@ -204,6 +291,33 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(self.control.snapshot()["grip_closed"])
         self.assertFalse(self.control.snapshot()["possession_confirmed"])
         self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
+
+    def test_manual_drive_raises_arm_without_opening_held_gripper(self):
+        self.reach_holding()
+        self.hardware.events.clear()
+        self.assertTrue(self.control.drive(-1, -1)["ok"])
+        self.assertEqual(self.hardware.events, [("arm", "standby")])
+        self.assertTrue(self.control.snapshot()["grip_closed"])
+
+    def test_explicit_standby_stops_tracks_and_commands_pose(self):
+        self.control.drive(1, 1)
+        self.hardware.events.clear()
+        self.assertTrue(self.control.standby()["ok"])
+        self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
+        self.assertEqual(self.hardware.events, [("grip", "standby"), ("arm", "standby")])
+
+    def test_telemetry_stop_does_not_replace_sensor_fault(self):
+        self.clock.advance(1)
+        self.control.heartbeat()
+        self.assertFalse(self.control.drive(1, 1)["ok"])
+        reason = self.control.snapshot()["reason"]
+        self.assertIn("Camera frames are stale", reason)
+        self.control.stop("Control stopped", preserve_reason=True)
+        self.assertEqual(self.control.snapshot()["reason"], reason)
+        self.control.stop("Operator stop")
+        self.assertEqual(self.control.snapshot()["last_fault"], reason)
+        self.control.set_enabled(True)
+        self.assertIsNone(self.control.snapshot()["last_fault"])
 
     def test_stop_and_disconnect_preserve_closed_gripper(self):
         self.reach_holding()

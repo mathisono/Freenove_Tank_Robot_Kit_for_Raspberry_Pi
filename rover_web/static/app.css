@@ -23,3 +23,21 @@
 .drive-actions .stop-button kbd{display:none}
 .stop-hint{margin:0 18px 16px;color:#a78e7c;font-size:10px;line-height:1.4;flex-shrink:0}
 @media(max-width:480px){.drive-actions{gap:8px;margin:0 10px}.drive-actions .enable-button,.drive-actions .stop-button{min-height:44px}.drive-actions .enable-button,.drive-actions .stop-button>span{font-size:10px}.stop-hint{margin:0 10px 12px}}
+.drive-diagnostic{display:flex;flex-direction:column;gap:5px;margin:11px 13px 0;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2);font-size:11px;line-height:1.4;color:var(--text);overflow-wrap:anywhere}
+.drive-diagnostic-label{color:var(--muted);font:9px var(--mono);letter-spacing:1.2px}
+.drive-diagnostic.fault{border-color:#70463e;color:var(--red)}
+.drive-diagnostic.ready{border-color:#3a4c34;color:var(--green)}
+.drive-diagnostic.warning{border-color:#69502c;color:var(--accent)}
+.standby-button{display:block;margin-top:10px;padding:9px 12px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);font-size:11px}
+.standby-button:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+.standby-button:disabled{opacity:.55}
+.standby-status{margin:6px 0 0;color:var(--muted);font-size:10px;line-height:1.4}
+.manual-pose{margin-top:18px;padding-top:15px;border-top:1px solid var(--line-soft);display:grid;gap:8px}
+.manual-pose h3{font-size:12px;font-weight:600;margin:0 0 3px}
+.manual-pose label{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--muted)}
+.manual-pose output{font:11px var(--mono);color:var(--text)}
+.manual-pose input[type="range"]{width:100%;accent-color:var(--accent);margin:0 0 5px;touch-action:auto}
+.manual-pose input:disabled{opacity:.45}
+.manual-pose button{min-height:40px;padding:9px 12px;border:1px solid #77603b;border-radius:5px;background:var(--accent-dark);color:var(--accent);font-size:11px;font-weight:600}
+.manual-pose button:disabled{opacity:.45}
+.manual-pose p{margin:0;color:var(--muted);font-size:10px;line-height:1.45}

@@ -5,7 +5,10 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 import math
+import os
 from pathlib import Path
+import stat
+import tempfile
 
 from .control import CONTROL_DEFAULTS, validate_control_config
 from .hardware import HARDWARE_DEFAULTS, validate_hardware_config
@@ -60,10 +63,70 @@ def load_config(path: str | Path | None = None) -> dict:
     return result
 
 
+def save_standby_angles(path: str | Path, gripper_angle: float, arm_angle: float) -> dict:
+    """Atomically save only the standby targets in an existing local config.
+
+    The caller must hold rover control synchronization and update its in-memory
+    hardware config from the returned validated settings after this succeeds.
+    """
+    path = Path(path)
+    original = path.lstat()
+    if not stat.S_ISREG(original.st_mode):
+        raise ValueError("Rover configuration must be a regular file")
+    with path.open(encoding="utf-8") as handle:
+        supplied = json.load(handle)
+    if not isinstance(supplied, dict):
+        raise ValueError("Configuration must contain a JSON object")
+    hardware = supplied.setdefault("hardware", {})
+    if not isinstance(hardware, dict):
+        raise ValueError("hardware must be an object")
+    hardware["gripper_standby_angle"] = gripper_angle
+    hardware["arm_standby_angle"] = arm_angle
+    merged = default_config()
+    normalized = deepcopy(supplied)
+    status_led = normalized.get("status_led")
+    if isinstance(status_led, dict):
+        status_led.pop("s2_sense_gpio", None)
+        status_led.pop("s2_active_high", None)
+    _merge(merged, normalized)
+    validate_config(merged)
+
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        os.fchmod(fd, stat.S_IMODE(original.st_mode))
+        created = os.fstat(fd)
+        if (created.st_uid, created.st_gid) != (original.st_uid, original.st_gid):
+            os.fchown(fd, original.st_uid, original.st_gid)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
+            json.dump(supplied, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return merged
+
+
 def validate_config(config: dict) -> None:
-    validate_hardware_config(config["hardware"])
+    hardware = validate_hardware_config(config["hardware"])
     validate_status_led_config(config["status_led"], config["hardware"])
-    validate_control_config(config["control"])
+    control = validate_control_config(config["control"])
+    if hardware["servo_calibrated"] or hardware["standby_calibrated"] or hardware["manual_servo_enabled"]:
+        longest_travel = max(float(hardware["gripper_max_angle"]) - float(hardware["gripper_min_angle"]),
+                             float(hardware["arm_max_angle"]) - float(hardware["arm_min_angle"]))
+        minimum_settle = longest_travel / float(hardware["servo_slew_deg_s"]) + 0.1
+        if float(control["standby_settle_s"]) < minimum_settle:
+            raise ValueError(f"control.standby_settle_s must be at least {minimum_settle:.2f} s for calibrated servo travel")
     validate_vision_config(config["vision"])
     server, camera = config["server"], config["camera"]
     if not isinstance(server["host"], str) or not server["host"]:

@@ -24,6 +24,7 @@ from aiohttp import web, WSMsgType
 
 from . import __version__
 from .camera import CameraService
+from .config import save_standby_angles
 from .control import RobotController
 from .hardware import FreenoveHardware, SimHardware
 from .status_led import BoardStatusLed
@@ -69,7 +70,6 @@ class RoverRuntime:
             except Exception as exc:
                 self.vision_error = str(exc)
                 self.controller.stop("Vision processing failed")
-                self.controller.set_enabled(False)
                 LOG.exception("Ball detector failed")
                 self._halt.wait(0.5)
 
@@ -103,8 +103,9 @@ class Client:
 
 
 class Console:
-    def __init__(self, config: dict, *, demo=False, token="", runtime=None):
+    def __init__(self, config: dict, *, demo=False, token="", runtime=None, config_path=None):
         self.config, self.demo, self.token = config, demo, token
+        self.config_path = Path(config_path) if config_path is not None else None
         if not demo and len(token) < 20:
             raise ValueError("An access key of at least 20 characters is required in hardware mode")
         self.runtime = runtime or RoverRuntime(config, demo)
@@ -169,15 +170,24 @@ class Console:
                                {"state": "unavailable", "error": self.status_led_error})
         return state
 
-    def revoke(self, reason: str) -> None:
+    def revoke(self, reason: str, *, preserve_reason: bool = False) -> None:
         if self.controller:
-            self.controller.stop(reason)
+            self.controller.stop(reason, preserve_reason=preserve_reason)
         self.owner = None
 
     @staticmethod
     def accepted(result: dict) -> None:
         if result.get("ok") is False:
             raise ValueError(result.get("reason", "Command rejected"))
+
+    def save_standby(self, gripper_angle: float, arm_angle: float) -> None:
+        if self.config_path is None:
+            raise ValueError("A rover configuration file is required to save standby")
+        saved = save_standby_angles(self.config_path, gripper_angle, arm_angle)
+        for name in ("gripper", "arm"):
+            key = f"{name}_standby_angle"
+            self.config["hardware"][key] = saved["hardware"][key]
+            self.controller.hardware.config[key] = saved["hardware"][key]
 
     async def start(self, app: web.Application) -> None:
         if not self.demo and self.config["status_led"]["enabled"]:
@@ -231,8 +241,13 @@ class Console:
 
     async def telemetry(self) -> None:
         while True:
-            if self.owner and (not self.video_fresh(self.owner) or not self.controller.snapshot().get("enabled")):
-                self.revoke("Video or control heartbeat expired")
+            if self.owner:
+                if not self.controller.snapshot().get("enabled"):
+                    # The controller already recorded the specific fault. Retry
+                    # stopping outputs without replacing that diagnostic.
+                    self.revoke("Control stopped", preserve_reason=True)
+                elif not self.video_fresh(self.owner):
+                    self.revoke("Video or control heartbeat expired")
             if self.status_led:
                 self.status_led.set_web_state(
                     connected=bool(self.clients),
@@ -356,6 +371,17 @@ class Console:
             if self.owner and self.owner is not client:
                 raise ValueError("The current driver must release the claw")
             self.accepted(self.controller.release())
+        elif kind == "action" and action == "standby":
+            if self.owner and self.owner is not client:
+                raise ValueError("The current driver must position the claw")
+            self.accepted(self.controller.standby())
+        elif kind == "action" and action == "set_pose":
+            if self.owner and self.owner is not client:
+                raise ValueError("The current driver must position the claw")
+            if self.config_path is None:
+                raise ValueError("A rover configuration file is required to save standby")
+            self.accepted(self.controller.set_manual_pose(message.get("gripper_angle"), message.get("arm_angle"),
+                                                          save_standby=self.save_standby))
         elif kind == "action" and action == "disable":
             if self.owner is client:
                 self.revoke("Controls disabled")
@@ -469,9 +495,9 @@ async def headers(request, handler):
     return response
 
 
-def create_app(config: dict, *, demo: bool = False, token: str = "", runtime=None) -> web.Application:
+def create_app(config: dict, *, demo: bool = False, token: str = "", runtime=None, config_path=None) -> web.Application:
     app = web.Application(client_max_size=262_144, middlewares=[headers])
-    console = Console(config, demo=demo, token=token, runtime=runtime)
+    console = Console(config, demo=demo, token=token, runtime=runtime, config_path=config_path)
     app[CONSOLE_KEY] = console
     async def index(request):
         return web.FileResponse(STATIC / "index.html")

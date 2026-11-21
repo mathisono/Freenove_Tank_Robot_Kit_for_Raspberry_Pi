@@ -5,7 +5,10 @@ import types
 import unittest
 from unittest.mock import patch
 
+from rover_web.config import default_config, validate_config
 from rover_web.hardware import FreenoveHardware, validate_hardware_config
+
+REAL_SERVO_LOOP = FreenoveHardware._servo_loop
 
 
 class FakeMotor:
@@ -33,6 +36,21 @@ class FakeMotor:
 
     def close(self):
         self.stop()
+
+
+class FakePWM:
+    def __init__(self, pwm_channel, hz, chip):
+        self.channel, self.hz, self.chip = pwm_channel, hz, chip
+        self.duty = None
+
+    def start(self, duty):
+        self.duty = duty
+
+    def change_duty_cycle(self, duty):
+        self.duty = duty
+
+    def stop(self):
+        pass
 
 
 class HardwareTests(unittest.TestCase):
@@ -95,6 +113,50 @@ class HardwareTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.hardware.grip(True)
         self.assertEqual(self.hardware._pwm, {})
+
+    def test_manual_pose_is_opt_in_and_validates_both_angles_before_motion(self):
+        with self.assertRaisesRegex(RuntimeError, "not enabled"):
+            self.hardware.set_pose(100, 150)
+        self.hardware.config["manual_servo_enabled"] = True
+        with self.assertRaises(ValueError):
+            self.hardware.set_pose(100, 151)
+        self.assertEqual(self.hardware._pwm, {})
+        with patch.dict(sys.modules, {"rpi_hardware_pwm": types.SimpleNamespace(HardwarePWM=FakePWM)}):
+            self.hardware.set_pose(100, 150)
+        self.assertEqual(self.hardware.commanded_pose, {"gripper": 100.0, "arm": 150.0})
+
+    def test_standby_commands_gripper_and_arm_on_original_pwm_channels(self):
+        self.hardware.config["standby_calibrated"] = True
+        with patch.dict(sys.modules, {"rpi_hardware_pwm": types.SimpleNamespace(HardwarePWM=FakePWM)}):
+            self.hardware.standby()
+            with self.assertRaisesRegex(RuntimeError, "commissioning"):
+                self.hardware.grip(False)
+            self.assertEqual(self.hardware._servo_targets, {"gripper": 90.0, "arm": 140.0})
+            self.assertEqual(self.hardware._pwm["gripper"].channel, 0)
+            self.assertEqual(self.hardware._pwm["arm"].channel, 1)
+
+            class OneCycle:
+                calls = 0
+
+                def wait(self, interval):
+                    self.calls += 1
+                    return self.calls > 1
+
+            real_closed = self.hardware._closed
+            try:
+                self.hardware._closed = OneCycle()
+                REAL_SERVO_LOOP(self.hardware)
+            finally:
+                self.hardware._closed = real_closed
+            self.assertAlmostEqual(self.hardware._pwm["gripper"].duty, 7.5)
+            self.assertAlmostEqual(self.hardware._pwm["arm"].duty, 2.5 + 140 * 10 / 180)
+
+    def test_short_standby_settle_is_rejected_for_commissioned_hardware(self):
+        config = default_config()
+        config["hardware"]["standby_calibrated"] = True
+        config["control"]["standby_settle_s"] = 0.1
+        with self.assertRaisesRegex(ValueError, "standby_settle_s"):
+            validate_config(config)
 
     def test_bad_servo_limits_rejected_before_gpio_use(self):
         with self.assertRaises(ValueError):
