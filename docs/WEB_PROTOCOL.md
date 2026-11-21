@@ -33,10 +33,15 @@ Client messages:
 {"type":"drive","ticket":"LATEST","seq":2,"throttle":0.3,"steering":0.1}
 {"type":"action","ticket":"LATEST","action":"grab"}
 {"type":"action","ticket":"LATEST","action":"release"}
+{"type":"action","ticket":"LATEST","action":"set_pose","gripper_angle":100,"arm_angle":140}
 {"type":"action","action":"stop"}
 {"type":"action","ticket":"LATEST","action":"disable"}
 {"type":"ping","sent_at":12345.67}
 ```
+
+`set_pose` stops tracks, commands both bounded servo targets, and saves them
+as the boot/driving standby in the configured local JSON file. The state
+reports commanded targets, not measured servo position.
 
 Drive values are normalized -1..1; positive steering turns right. Motor output
 is scaled by the configured speed cap. Drive sequence numbers must increase

@@ -334,8 +334,8 @@ class RobotController:
             self._reason = "Claw moving to standby; tracks stopped"
             return self._result()
 
-    def set_manual_pose(self, gripper_angle, arm_angle):
-        """Stop tracks, then apply one explicit bounded gripper/arm command."""
+    def set_manual_pose(self, gripper_angle, arm_angle, *, save_standby=None):
+        """Stop tracks, command a bounded pose, then save it for standby."""
         with self._lock:
             if not self.hardware.manual_servo_ready:
                 self._reason = "Manual claw control is not enabled"
@@ -355,12 +355,20 @@ class RobotController:
             except Exception as exc:
                 self._abort(f"Manual claw command failed: {exc}")
                 return self._result(False)
+            if save_standby is not None:
+                try:
+                    save_standby(gripper_angle, arm_angle)
+                except Exception as exc:
+                    self._abort(f"Manual pose commanded, but standby save failed: {exc}")
+                    return self._result(False)
             # Any non-open target is conservatively treated as a held grip so
             # automatic driving standby cannot unexpectedly open it.
             self._grip_closed = gripper_angle != self.hardware.config["gripper_standby_angle"]
             self._manual_pose_until = self.clock() + (0 if self.hardware.simulated else self.config["standby_settle_s"])
             self._phase = "holding" if self._grip_closed else ("idle" if self._enabled else "stopped")
-            self._reason = f"Manual pose commanded: claw {gripper_angle:g}°, arm {arm_angle:g}°; tracks stopped"
+            self._reason = (f"Manual pose commanded and standby saved: claw {gripper_angle:g}°, arm {arm_angle:g}°; tracks stopped"
+                            if save_standby is not None else
+                            f"Manual pose commanded: claw {gripper_angle:g}°, arm {arm_angle:g}°; tracks stopped")
             return self._result()
 
     def calibration_error(self):

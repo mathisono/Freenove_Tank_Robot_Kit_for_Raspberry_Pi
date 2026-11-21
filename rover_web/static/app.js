@@ -212,9 +212,12 @@
     $("setPoseButton").disabled = !manualAllowed || positioning;
     $("manualPoseStatus").textContent = state.manual_servo_enabled !== true ?
       "Manual servo control is unavailable on this rover." :
-      finite(state.servo_target?.gripper) && finite(state.servo_target?.arm) ?
-      `Last command: claw ${state.servo_target.gripper}°, arm ${state.servo_target.arm}°. No position feedback.` :
-      "Select both angles, then press Set. No position feedback.";
+      finite(state.servo_standby?.gripper) && finite(state.servo_standby?.arm) ?
+      `Saved boot/driving standby: claw ${state.servo_standby.gripper}°, arm ${state.servo_standby.arm}°. ` +
+      (finite(state.servo_target?.gripper) && finite(state.servo_target?.arm) ?
+        `Last command: claw ${state.servo_target.gripper}°, arm ${state.servo_target.arm}°. ` : "") +
+      "No position feedback." :
+      "Select both angles, then press Set to move and save standby. No position feedback.";
     $("stopButton").disabled = !authenticated || !linked;
     $("footerStatus").textContent = enabled ? "You have control" : controlBusy() && !owned ? "Viewing · another operator has control" : "Controls disabled";
     const readout = $("driveDiagnostic");

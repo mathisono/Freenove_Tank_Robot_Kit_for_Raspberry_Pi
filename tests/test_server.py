@@ -6,13 +6,15 @@ so a missing response fails a test rather than hanging the test run.
 import asyncio
 from collections import deque
 import json
+from pathlib import Path
+import tempfile
 import time
 import unittest
 
 from aiohttp import CookieJar, WSServerHandshakeError, WSMsgType
 from aiohttp.test_utils import TestClient, TestServer
 
-from rover_web.config import default_config
+from rover_web.config import default_config, load_config
 from rover_web.control import RobotController
 from rover_web.hardware import SimHardware
 from rover_web.server import CONSOLE_KEY, create_app
@@ -60,9 +62,13 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         self.config["hardware"]["servo_calibrated"] = True
         self.config["control"]["release_lower_s"] = 0.001
         self.config["control"]["release_open_s"] = 0.001
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.config_path = Path(self.temp_dir.name) / "rover.json"
+        self.config_path.write_text(json.dumps(self.config), encoding="utf-8")
         self.runtime = FakeRuntime(self.config)
         self.runtime.hardware.events.clear()
-        self.app = create_app(self.config, demo=False, token=TOKEN, runtime=self.runtime)
+        self.app = create_app(self.config, demo=False, token=TOKEN, runtime=self.runtime,
+                              config_path=self.config_path)
         self.console = self.app[CONSOLE_KEY]
         self.client = TestClient(TestServer(self.app), cookie_jar=CookieJar(unsafe=True))
         await self.client.start_server()
@@ -73,6 +79,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         for ws in self.websockets:
             await asyncio.wait_for(ws.close(), 1)
         await asyncio.wait_for(self.client.close(), 3)
+        self.temp_dir.cleanup()
 
     async def login(self):
         response = await self.client.post("/api/login", json={"token": TOKEN})
@@ -276,6 +283,8 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         error = await self.receive(ws, "error")
         self.assertIn("not enabled", error["message"])
         self.runtime.hardware.config["manual_servo_enabled"] = True
+        self.config["hardware"]["manual_servo_enabled"] = True
+        self.config_path.write_text(json.dumps(self.config), encoding="utf-8")
         await self.send(ws, "action", action="set_pose", gripper_angle=100, arm_angle=151)
         error = await self.receive(ws, "error")
         self.assertIn("Arm target", error["message"])
@@ -283,6 +292,23 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         await self.send(ws, "action", action="set_pose", gripper_angle=100, arm_angle=150)
         state = await self.receive(ws, predicate=lambda message: message["state"]["servo_target"].get("gripper") == 100)
         self.assertEqual(state["state"]["servo_target"], {"gripper": 100.0, "arm": 150.0})
+        self.assertEqual(state["state"]["servo_standby"], {"gripper": 100, "arm": 150})
+        self.assertEqual(load_config(self.config_path)["hardware"]["gripper_standby_angle"], 100)
+        self.assertEqual(load_config(self.config_path)["hardware"]["arm_standby_angle"], 150)
+        self.assertEqual((self.runtime.hardware.left, self.runtime.hardware.right), (0, 0))
+        self.runtime.hardware.events.clear()
+        self.assertTrue(self.runtime.controller.set_enabled(True)["ok"])
+        self.assertEqual(self.runtime.hardware.events, [("grip", "standby"), ("arm", "standby")])
+        self.assertEqual(self.runtime.hardware.commanded_pose, {"gripper": 100, "arm": 150})
+
+    async def test_manual_pose_save_failure_is_reported_and_stops_controls(self):
+        ws = await self.socket()
+        self.runtime.hardware.config["manual_servo_enabled"] = True
+        self.config_path.unlink()
+        await self.send(ws, "action", action="set_pose", gripper_angle=100, arm_angle=140)
+        error = await self.receive(ws, "error")
+        self.assertIn("standby save failed", error["message"])
+        self.assertFalse(self.runtime.controller.snapshot()["enabled"])
         self.assertEqual((self.runtime.hardware.left, self.runtime.hardware.right), (0, 0))
 
     async def test_driver_disconnect_clears_ownership_and_stops(self):

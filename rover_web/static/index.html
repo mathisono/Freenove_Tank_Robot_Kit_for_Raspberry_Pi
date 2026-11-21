@@ -96,7 +96,7 @@
         <section class="panel claw-panel" aria-labelledby="clawTitle">
           <div class="claw-main">
             <div class="claw-heading"><span class="claw-symbol"><svg><use href="#i-claw"/></svg></span><div><p class="eyebrow">BALL RETRIEVAL</p><h2 id="clawTitle">Claw control</h2></div></div>
-            <p class="claw-description">Grab aligns with the ball, approaches, and closes the claw. Release cancels the approach and opens it. Standby commands a raised arm; a held grip stays closed. Manual Set can change or open the grip.</p>
+            <p class="claw-description">Grab aligns with the ball, approaches, and closes the claw. Release cancels the approach and opens it. Standby commands a raised arm; a held grip stays closed. Manual Set moves both servos and saves that pose for boot and driving.</p>
             <div class="claw-toggle" role="group" aria-label="Claw action"><button id="grabButton" type="button" aria-pressed="false" disabled><svg><use href="#i-claw"/></svg>Grab</button><button id="releaseButton" type="button" aria-pressed="false" disabled>Release <span aria-hidden="true">↗</span></button></div>
             <button id="standbyButton" class="standby-button" type="button" disabled>Move claw to standby</button><p id="standbyStatus" class="standby-status">Checking claw calibration.</p>
             <div class="manual-pose" aria-labelledby="manualPoseTitle">
@@ -105,7 +105,7 @@
               <input id="gripperAngle" type="range" min="90" max="150" step="1" value="90" disabled>
               <label for="armAngle">Arm angle <output id="armAngleValue" for="armAngle">—</output></label>
               <input id="armAngle" type="range" min="90" max="150" step="1" value="150" disabled>
-              <button id="setPoseButton" type="button" disabled>Set claw and arm</button>
+              <button id="setPoseButton" type="button" disabled>Set and save standby</button>
               <p id="manualPoseStatus" role="status" aria-live="polite">Waiting for rover position settings.</p>
             </div>
           </div>

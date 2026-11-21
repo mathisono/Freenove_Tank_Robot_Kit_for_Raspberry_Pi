@@ -42,7 +42,7 @@ def main() -> None:
             parser.error("Real rover mode requires an access key of at least 20 characters via --token-file or ROVER_TOKEN_FILE")
         from aiohttp import web
         from .server import create_app
-        app = create_app(config, demo=args.demo, token=token)
+        app = create_app(config, demo=args.demo, token=token, config_path=args.config)
         web.run_app(app, host=config["server"]["host"], port=config["server"]["port"],
                     access_log=None, shutdown_timeout=5)
     except (ValueError, OSError) as exc:

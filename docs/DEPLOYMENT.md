@@ -174,9 +174,10 @@ With `manual_servo_enabled=true`, the GUI exposes separate gripper and arm
 angle sliders and a Set button. Moving a slider alone never sends a command.
 Set stops tracks, then commands both angles within the configured 90–150°
 limits. The GUI reports the last commanded targets, not actual measured servo
-positions. Set does not change the configured automatic boot/driving standby;
-adjust `hardware.gripper_standby_angle` and `hardware.arm_standby_angle`
-separately after observing a safe pose. The forward clearance interlock stops
+positions. Set atomically saves both targets as the automatic boot/driving
+standby in the configured JSON file; the rover service must have write access
+to that file. Save failures stop controls and appear in the GUI. Confirm the
+physical pose is safe before using it for standby. The forward clearance interlock stops
 forward tracks when sonar is too close but leaves controls enabled for reverse.
 
 Never use autonomous driving to discover servo endpoints. After verifying just

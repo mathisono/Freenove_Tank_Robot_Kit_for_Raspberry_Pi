@@ -24,9 +24,9 @@ in [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 - **Release:** stop, lower, open. Available with driving/video disabled when
   servo commissioning is complete and another browser does not own control.
 - **Manual claw/arm:** with `hardware.manual_servo_enabled=true`, select bounded
-  target angles and press Set to command both servos with tracks stopped.
-  The readout is a commanded target, not measured position; Set does not save
-  the boot/driving standby pose.
+  target angles and press Set to stop the tracks, command both servos, and
+  atomically save those angles as boot/driving standby in the local config.
+  The readout is a commanded target, not measured position.
 - **Search Mode — Coming soon:** reserved in the UI and rejected by the
   server. Grab does not roam when no ball is visible.
 - **Responsive controls:** separate WebSocket, 25 Hz commands, one driver,
