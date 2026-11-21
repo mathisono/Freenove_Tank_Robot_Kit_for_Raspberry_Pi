@@ -364,6 +364,10 @@ class Console:
             if self.owner and self.owner is not client:
                 raise ValueError("The current driver must position the claw")
             self.accepted(self.controller.standby())
+        elif kind == "action" and action == "set_pose":
+            if self.owner and self.owner is not client:
+                raise ValueError("The current driver must position the claw")
+            self.accepted(self.controller.set_manual_pose(message.get("gripper_angle"), message.get("arm_angle")))
         elif kind == "action" and action == "disable":
             if self.owner is client:
                 self.revoke("Controls disabled")

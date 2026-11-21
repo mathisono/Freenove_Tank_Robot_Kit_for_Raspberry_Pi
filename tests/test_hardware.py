@@ -114,6 +114,17 @@ class HardwareTests(unittest.TestCase):
             self.hardware.grip(True)
         self.assertEqual(self.hardware._pwm, {})
 
+    def test_manual_pose_is_opt_in_and_validates_both_angles_before_motion(self):
+        with self.assertRaisesRegex(RuntimeError, "not enabled"):
+            self.hardware.set_pose(100, 150)
+        self.hardware.config["manual_servo_enabled"] = True
+        with self.assertRaises(ValueError):
+            self.hardware.set_pose(100, 151)
+        self.assertEqual(self.hardware._pwm, {})
+        with patch.dict(sys.modules, {"rpi_hardware_pwm": types.SimpleNamespace(HardwarePWM=FakePWM)}):
+            self.hardware.set_pose(100, 150)
+        self.assertEqual(self.hardware.commanded_pose, {"gripper": 100.0, "arm": 150.0})
+
     def test_standby_commands_gripper_and_arm_on_original_pwm_channels(self):
         self.hardware.config["standby_calibrated"] = True
         with patch.dict(sys.modules, {"rpi_hardware_pwm": types.SimpleNamespace(HardwarePWM=FakePWM)}):

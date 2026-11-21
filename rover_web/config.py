@@ -64,7 +64,7 @@ def validate_config(config: dict) -> None:
     hardware = validate_hardware_config(config["hardware"])
     validate_status_led_config(config["status_led"], config["hardware"])
     control = validate_control_config(config["control"])
-    if hardware["servo_calibrated"] or hardware["standby_calibrated"]:
+    if hardware["servo_calibrated"] or hardware["standby_calibrated"] or hardware["manual_servo_enabled"]:
         longest_travel = max(float(hardware["gripper_max_angle"]) - float(hardware["gripper_min_angle"]),
                              float(hardware["arm_max_angle"]) - float(hardware["arm_min_angle"]))
         minimum_settle = longest_travel / float(hardware["servo_slew_deg_s"]) + 0.1

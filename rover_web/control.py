@@ -126,6 +126,7 @@ class RobotController:
         self._grip_closed = None
         self._standby_commanded = False
         self._standby_until = None
+        self._manual_pose_until = None
         self._request_started = None
         self._stage_deadline = None
         self._preparing = False
@@ -224,6 +225,7 @@ class RobotController:
             self._cancel_auto()
             self._standby_commanded = False
             self._standby_until = None
+            self._manual_pose_until = None
             self._enabled = bool(enabled)
             if enabled:
                 self._heartbeat_at = self.clock()
@@ -253,6 +255,7 @@ class RobotController:
             self._cancel_auto()
             self._standby_commanded = False
             self._standby_until = None
+            self._manual_pose_until = None
             self._phase = previous_phase if preserve_reason and previous_phase == "error" else (
                 "holding" if self._grip_closed else "stopped")
             self._reason = previous_reason if preserve_reason else str(reason)
@@ -310,6 +313,7 @@ class RobotController:
         if not self._grip_closed:
             self._grip_closed = False
         self._standby_commanded = True
+        self._manual_pose_until = None
         self._standby_until = self.clock() + (0 if self.hardware.simulated else self.config["standby_settle_s"])
 
     def standby(self):
@@ -328,6 +332,35 @@ class RobotController:
                 return self._result(False)
             self._phase = "holding" if self._grip_closed else ("idle" if self._enabled else "stopped")
             self._reason = "Claw moving to standby; tracks stopped"
+            return self._result()
+
+    def set_manual_pose(self, gripper_angle, arm_angle):
+        """Stop tracks, then apply one explicit bounded gripper/arm command."""
+        with self._lock:
+            if not self.hardware.manual_servo_ready:
+                self._reason = "Manual claw control is not enabled"
+                return self._result(False)
+            for name, angle in (("gripper", gripper_angle), ("arm", arm_angle)):
+                low = self.hardware.config[f"{name}_min_angle"]
+                high = self.hardware.config[f"{name}_max_angle"]
+                if type(angle) not in (int, float) or not math.isfinite(angle) or not low <= angle <= high:
+                    self._reason = f"{name.capitalize()} target must be between {low:g}° and {high:g}°"
+                    return self._result(False)
+            self._halt()
+            self._cancel_auto()
+            self._standby_commanded = False
+            self._standby_until = None
+            try:
+                self.hardware.set_pose(gripper_angle, arm_angle)
+            except Exception as exc:
+                self._abort(f"Manual claw command failed: {exc}")
+                return self._result(False)
+            # Any non-open target is conservatively treated as a held grip so
+            # automatic driving standby cannot unexpectedly open it.
+            self._grip_closed = gripper_angle != self.hardware.config["gripper_standby_angle"]
+            self._manual_pose_until = self.clock() + (0 if self.hardware.simulated else self.config["standby_settle_s"])
+            self._phase = "holding" if self._grip_closed else ("idle" if self._enabled else "stopped")
+            self._reason = f"Manual pose commanded: claw {gripper_angle:g}°, arm {arm_angle:g}°; tracks stopped"
             return self._result()
 
     def calibration_error(self):
@@ -432,6 +465,7 @@ class RobotController:
         self._cancel_auto()
         self._standby_commanded = False
         self._standby_until = None
+        self._manual_pose_until = None
         self._phase = "holding" if self._grip_closed else "error"
         self._reason = str(reason)
         self._last_fault = self._reason
@@ -449,16 +483,17 @@ class RobotController:
         return None
 
     def _apply_manual(self, now):
-        if self._standby_until is not None and now < self._standby_until:
+        if (self._standby_until is not None and now < self._standby_until) or (self._manual_pose_until is not None and now < self._manual_pose_until):
             self._set_motors(0, 0)
-            self._reason = "Claw moving to standby; tracks stopped"
+            self._reason = "Claw moving; tracks stopped"
             return
         error = self._sensor_error(now)
         if error:
             self._abort(error)
             return
         if self._range_cm <= self.config["min_clearance_cm"] and max(self._manual) > 0:
-            self._abort("Front clearance is below the stop distance")
+            self._set_motors(0, 0)
+            self._reason = "Front clearance is below the stop distance; forward tracks stopped"
             return
         speed = self.config["manual_max_speed"]
         self._set_motors(self._manual[0] * speed, self._manual[1] * speed)
@@ -636,6 +671,15 @@ class RobotController:
                 "grip_closed": self._grip_closed, "possession_confirmed": False,
                 "manipulator_calibrated": bool(self.hardware.manipulator_ready),
                 "standby_calibrated": bool(self.hardware.standby_ready),
+                "manual_servo_enabled": bool(self.hardware.manual_servo_ready),
+                "servo_target": self.hardware.commanded_pose,
+                "servo_limits": {name: {"min": self.hardware.config[f"{name}_min_angle"],
+                                        "max": self.hardware.config[f"{name}_max_angle"]}
+                                 for name in ("gripper", "arm")},
+                "servo_standby": {name: self.hardware.config[f"{name}_standby_angle"]
+                                  for name in ("gripper", "arm")},
+                "servo_moving": any(until is not None and now < until
+                                    for until in (self._standby_until, self._manual_pose_until)),
                 "standby_state": ("unavailable" if not self.hardware.standby_ready else
                                   "other" if not self._standby_commanded else
                                   "moving" if self._standby_until is not None and now < self._standby_until else

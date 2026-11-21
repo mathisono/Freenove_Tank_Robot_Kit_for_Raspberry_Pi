@@ -43,6 +43,8 @@
   let noticeTimer = null;
   let driveStopReason = null;
   let driveFault = false;
+  let manualPoseDirty = false;
+  let pendingPose = null;
   let retired = false;
 
   const finite = (value) => typeof value === "number" && Number.isFinite(value);
@@ -128,7 +130,7 @@
   }
 
   function driveTick() {
-    if (!localEnabled || !ownsControl() || !freshVideo() || state.standby_state === "moving") {
+    if (!localEnabled || !ownsControl() || !freshVideo() || state.servo_moving === true || state.standby_state === "moving") {
       zeroDrive();
       return;
     }
@@ -168,12 +170,12 @@
     const healthy = freshVideo();
     const owned = ownsControl();
     const enabled = localEnabled && owned && state.enabled === true && healthy && linked;
-    const positioning = state.standby_state === "moving";
+    const positioning = state.servo_moving === true || state.standby_state === "moving";
     const nearFrontStop = finite(state.distance_cm) && finite(state.min_clearance_cm) &&
       state.distance_cm <= state.min_clearance_cm + 2;
     const frontStopMessage = nearFrontStop ? state.distance_cm <= state.min_clearance_cm ?
-      `Front clearance ${state.distance_cm.toFixed(1)} cm is inside the ${state.min_clearance_cm} cm stop limit; forward drive will stop controls.` :
-      `Front clearance ${state.distance_cm.toFixed(1)} cm is near the ${state.min_clearance_cm} cm stop limit; a closer reading will stop forward drive.` : null;
+      `Front clearance ${state.distance_cm.toFixed(1)} cm is inside the ${state.min_clearance_cm} cm stop limit; forward tracks stay stopped, but controls and reverse remain available.` :
+      `Front clearance ${state.distance_cm.toFixed(1)} cm is near the ${state.min_clearance_cm} cm stop limit; a closer reading will block forward drive.` : null;
     for (const button of padButtons) button.disabled = !enabled || positioning;
     const enable = $("enableButton");
     enable.disabled = !linked || !healthy || !ticket || (controlBusy() && !owned) || enableRequested;
@@ -193,13 +195,33 @@
     $("standbyStatus").textContent = state.standby_state === "moving" ? "Moving to standby; tracks held stopped." :
       state.standby_state === "commanded" ? state.grip_closed === true ? "Arm commanded to standby; grip held closed." : "Claw commanded to standby." :
       state.standby_state === "unavailable" ? "Standby unavailable until servo angles are commissioned." : "Claw is away from standby.";
+    const manualAllowed = linked && !!ticket && !(controlBusy() && !owned) && state.manual_servo_enabled === true;
+    for (const name of ["gripper", "arm"]) {
+      const input = $(name === "gripper" ? "gripperAngle" : "armAngle");
+      const limits = state.servo_limits?.[name];
+      if (limits && finite(limits.min) && finite(limits.max)) {
+        input.min = String(limits.min);
+        input.max = String(limits.max);
+      }
+      const commanded = state.servo_target?.[name];
+      const fallback = state.servo_standby?.[name];
+      if (!manualPoseDirty && finite(commanded ?? fallback)) input.value = String(commanded ?? fallback);
+      $(name === "gripper" ? "gripperAngleValue" : "armAngleValue").textContent = `${input.value}°`;
+      input.disabled = !manualAllowed;
+    }
+    $("setPoseButton").disabled = !manualAllowed || positioning;
+    $("manualPoseStatus").textContent = state.manual_servo_enabled !== true ?
+      "Manual servo control is unavailable on this rover." :
+      finite(state.servo_target?.gripper) && finite(state.servo_target?.arm) ?
+      `Last command: claw ${state.servo_target.gripper}°, arm ${state.servo_target.arm}°. No position feedback.` :
+      "Select both angles, then press Set. No position feedback.";
     $("stopButton").disabled = !authenticated || !linked;
     $("footerStatus").textContent = enabled ? "You have control" : controlBusy() && !owned ? "Viewing · another operator has control" : "Controls disabled";
     const readout = $("driveDiagnostic");
     const readoutText = $("driveDiagnosticText");
     readoutText.textContent = !linked ? "Control link disconnected. Reconnect before enabling." :
       enableRequested ? "Waiting for the rover to enable controls…" :
-      enabled && positioning ? "Claw moving to standby; tracks held stopped." :
+      enabled && positioning ? "Claw moving; tracks held stopped." :
       enabled && frontStopMessage ? frontStopMessage :
       enabled && state.standby_state === "unavailable" ? "Drive ready; automatic claw standby needs servo calibration." :
       enabled ? "Ready. Hold a direction to drive; release to stop." :
@@ -221,6 +243,11 @@
   function renderState(next) {
     const oldPhase = currentPhase();
     state = next || {};
+    if (pendingPose && state.servo_target?.gripper === pendingPose.gripper_angle &&
+        state.servo_target?.arm === pendingPose.arm_angle) {
+      pendingPose = null;
+      manualPoseDirty = false;
+    }
     if (enableRequested && state.enabled === true && ownsControl()) {
       enableRequested = false;
       localEnabled = true;
@@ -284,6 +311,7 @@
       const elapsed = performance.now() - payload.sent_at;
       if (elapsed >= 0 && elapsed < 10000) $("latencyValue").textContent = Math.round(elapsed).toString();
     } else if (payload.type === "error") {
+      pendingPose = null;
       const message = String(payload.message || payload.error || "The rover could not complete that command.");
       const stale = payload.code === "stale_ticket" || /stale[_ ]ticket|expired.*ticket|ticket.*expired/i.test(message);
       if (enableRequested) enableRequested = false;
@@ -585,6 +613,22 @@
   $("standbyButton").addEventListener("click", () => {
     clearInput();
     send({type: "action", action: "standby"}, {urgent: true});
+  });
+  for (const name of ["gripper", "arm"]) {
+    const input = $(name === "gripper" ? "gripperAngle" : "armAngle");
+    input.addEventListener("input", () => {
+      manualPoseDirty = true;
+      $(name === "gripper" ? "gripperAngleValue" : "armAngleValue").textContent = `${input.value}°`;
+    });
+  }
+  $("setPoseButton").addEventListener("click", () => {
+    if ($("setPoseButton").disabled) return;
+    const pose = {gripper_angle: Number($("gripperAngle").value), arm_angle: Number($("armAngle").value)};
+    clearInput();
+    if (send({type: "action", action: "set_pose", ...pose}, {urgent: true})) {
+      pendingPose = pose;
+      manualPoseDirty = true;
+    } else showNotice("Claw control link is not ready. Try again.", true);
   });
   $("stopButton").addEventListener("pointerdown", (event) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;

@@ -23,6 +23,10 @@ in [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
   “Grip held” does not prove a successful pickup.
 - **Release:** stop, lower, open. Available with driving/video disabled when
   servo commissioning is complete and another browser does not own control.
+- **Manual claw/arm:** with `hardware.manual_servo_enabled=true`, select bounded
+  target angles and press Set to command both servos with tracks stopped.
+  The readout is a commanded target, not measured position; Set does not save
+  the boot/driving standby pose.
 - **Search Mode — Coming soon:** reserved in the UI and rejected by the
   server. Grab does not roam when no ball is visible.
 - **Responsive controls:** separate WebSocket, 25 Hz commands, one driver,
@@ -30,6 +34,8 @@ in [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 - **Stops:** stale/missing sensors, lost target, lost connection, expired
   commands, or STOP halt travel. Stop freezes further arm/claw slew at the
   last commanded position without automatically opening the gripper.
+  Close front sonar readings block forward movement without dropping Drive
+  Enable; backing away remains available.
 
 Ball color, rotation, track polarity, servo endpoints, speed limits, and
 pickup geometry are configurable. Red is the kit-ball default, not a general

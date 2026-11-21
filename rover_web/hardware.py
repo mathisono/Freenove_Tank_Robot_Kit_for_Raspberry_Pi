@@ -31,6 +31,7 @@ HARDWARE_DEFAULTS = {
     "arm_pwm_channel": 1,
     "servo_calibrated": False,
     "standby_calibrated": False,
+    "manual_servo_enabled": False,
     "gripper_min_angle": 90.0,
     "gripper_max_angle": 150.0,
     "gripper_open_angle": 90.0,
@@ -51,7 +52,7 @@ def validate_hardware_config(config: dict | None) -> dict:
     result = {**HARDWARE_DEFAULTS, **(config or {})}
     if result["board_version"] != 2:
         raise ValueError("This web adapter supports the pictured FNK0077 V2 board only")
-    for key in ("left_inverted", "right_inverted", "servo_calibrated", "standby_calibrated", "gripper_inverted", "arm_inverted"):
+    for key in ("left_inverted", "right_inverted", "servo_calibrated", "standby_calibrated", "manual_servo_enabled", "gripper_inverted", "arm_inverted"):
         if not isinstance(result[key], bool):
             raise ValueError(f"hardware.{key} must be true or false")
     gpio_keys = [key for key in result if key.endswith("_gpio")]
@@ -106,6 +107,7 @@ class FreenoveHardware:
         self._pwm = {}
         self._servo_positions = {}
         self._servo_targets = {}
+        self._commanded_angles = {}
         self._servo_error = None
         self._motor_error = None
         self._trigger = self._echo = None
@@ -133,6 +135,15 @@ class FreenoveHardware:
     @property
     def standby_ready(self) -> bool:
         return (self.config["standby_calibrated"] or self.config["servo_calibrated"]) and self._servo_error is None
+
+    @property
+    def manual_servo_ready(self) -> bool:
+        return self.config["manual_servo_enabled"] and self._servo_error is None
+
+    @property
+    def commanded_pose(self) -> dict:
+        with self._servo_lock:
+            return dict(self._commanded_angles)
 
     @property
     def fault(self):
@@ -191,12 +202,14 @@ class FreenoveHardware:
                     else:
                         self._drive_deadline = 0.0
 
-    def _servo_target(self, name: str, angle: float, *, allow_standby: bool = False):
-        if self._closed.is_set() or not (self.manipulator_ready or allow_standby and self.standby_ready):
+    def _servo_target(self, name: str, angle: float, *, allow_standby: bool = False, allow_manual: bool = False):
+        if self._closed.is_set() or not (self.manipulator_ready or allow_standby and self.standby_ready
+                                        or allow_manual and self.manual_servo_ready):
             raise RuntimeError("Servo commissioning must be completed before moving the gripper or arm")
         low, high = self.config[f"{name}_min_angle"], self.config[f"{name}_max_angle"]
-        if not low <= angle <= high:
+        if isinstance(angle, bool) or not isinstance(angle, (int, float)) or not math.isfinite(angle) or not low <= angle <= high:
             raise ValueError("Servo angle is outside configured limits")
+        logical_angle = float(angle)
         if self.config[f"{name}_inverted"]:
             angle = low + high - angle
         with self._servo_lock:
@@ -207,6 +220,7 @@ class FreenoveHardware:
                 pwm.start(0)
                 self._pwm[name] = pwm
             self._servo_targets[name] = float(angle)
+            self._commanded_angles[name] = logical_angle
 
     def grip(self, open: bool):
         position = "open" if open else "closed"
@@ -223,6 +237,17 @@ class FreenoveHardware:
             self._servo_target("gripper", self.config["gripper_standby_angle"], allow_standby=True)
         self._servo_target("arm", self.config["arm_standby_angle"], allow_standby=True)
 
+    def set_pose(self, gripper_angle: float, arm_angle: float):
+        """Explicit manual target, bounded to configured travel; never drives tracks."""
+        if not self.manual_servo_ready:
+            raise RuntimeError("Manual servo control is not enabled")
+        for name, angle in (("gripper", gripper_angle), ("arm", arm_angle)):
+            low, high = self.config[f"{name}_min_angle"], self.config[f"{name}_max_angle"]
+            if isinstance(angle, bool) or not isinstance(angle, (int, float)) or not math.isfinite(angle) or not low <= angle <= high:
+                raise ValueError(f"{name} angle is outside configured limits")
+        self._servo_target("gripper", gripper_angle, allow_manual=True)
+        self._servo_target("arm", arm_angle, allow_manual=True)
+
     def hold_manipulator(self):
         """Cancel pending servo travel while keeping the last pulses active.
 
@@ -231,6 +256,10 @@ class FreenoveHardware:
         """
         with self._servo_lock:
             self._servo_targets = dict(self._servo_positions)
+            for name, angle in self._servo_positions.items():
+                if self.config[f"{name}_inverted"]:
+                    angle = self.config[f"{name}_min_angle"] + self.config[f"{name}_max_angle"] - angle
+                self._commanded_angles[name] = angle
 
     def _servo_loop(self):
         interval = 0.02
@@ -316,6 +345,7 @@ class SimHardware:
         self.events = []
         self.gripper_open = None
         self.arm_position = None
+        self._commanded_angles = {}
         self.closed = False
         self.fault = None
 
@@ -326,6 +356,14 @@ class SimHardware:
     @property
     def standby_ready(self):
         return self.config["standby_calibrated"] or self.config["servo_calibrated"]
+
+    @property
+    def manual_servo_ready(self):
+        return self.config["manual_servo_enabled"]
+
+    @property
+    def commanded_pose(self):
+        return dict(self._commanded_angles)
 
     def drive(self, left, right):
         if self.closed:
@@ -339,6 +377,7 @@ class SimHardware:
         if not self.manipulator_ready:
             raise RuntimeError("Servo calibration required")
         self.gripper_open = bool(open)
+        self._commanded_angles["gripper"] = self.config["gripper_open_angle" if open else "gripper_closed_angle"]
         self.events.append(("grip", bool(open)))
 
     def arm(self, position):
@@ -347,6 +386,7 @@ class SimHardware:
         if position not in ("pickup", "carry", "standby"):
             raise ValueError("Unknown arm position")
         self.arm_position = position
+        self._commanded_angles["arm"] = self.config[f"arm_{position}_angle"]
         self.events.append(("arm", position))
 
     def standby(self, *, keep_closed=False):
@@ -354,9 +394,23 @@ class SimHardware:
             raise RuntimeError("Standby servo calibration required")
         if not keep_closed:
             self.gripper_open = True
+            self._commanded_angles["gripper"] = self.config["gripper_standby_angle"]
             self.events.append(("grip", "standby"))
         self.arm_position = "standby"
+        self._commanded_angles["arm"] = self.config["arm_standby_angle"]
         self.events.append(("arm", "standby"))
+
+    def set_pose(self, gripper_angle, arm_angle):
+        if not self.manual_servo_ready:
+            raise RuntimeError("Manual servo control is not enabled")
+        for name, angle in (("gripper", gripper_angle), ("arm", arm_angle)):
+            low, high = self.config[f"{name}_min_angle"], self.config[f"{name}_max_angle"]
+            if isinstance(angle, bool) or not isinstance(angle, (int, float)) or not math.isfinite(angle) or not low <= angle <= high:
+                raise ValueError(f"{name} angle is outside configured limits")
+        self._commanded_angles.update(gripper=float(gripper_angle), arm=float(arm_angle))
+        self.gripper_open = gripper_angle == self.config["gripper_open_angle"]
+        self.arm_position = "manual"
+        self.events.append(("pose", float(gripper_angle), float(arm_angle)))
 
     def distance_cm(self):
         return self.range_cm

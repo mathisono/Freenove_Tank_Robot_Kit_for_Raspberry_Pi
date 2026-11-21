@@ -146,6 +146,7 @@ Default values are starting limits, not measurements of this rover:
 | --- | --- |
 | `hardware.servo_calibrated` | false until travel and endpoints are checked |
 | `hardware.standby_calibrated` | false until the 90°/140° raised standby pose and travel are checked; does not enable Grab/Release |
+| `hardware.manual_servo_enabled` | false until the operator is present to supervise explicit Set commands within configured travel limits |
 | Gripper open / closed | 90° / 145°, within 90–150° bounds |
 | Arm pickup / carry | 95° / 135°, within 90–150° bounds |
 | Gripper / arm standby | Nominal 90° open / 140° raised from original Freenove startup; verify on this rover |
@@ -160,14 +161,23 @@ Use the original working endpoints as evidence and verify them with the
 tracks lifted. Nominal angles do not prove linkage clearance. Once
 `standby_calibrated=true` or `servo_calibrated=true`, startup commands the configured standby pose and
 manual driving commands it again before tracks move. A closed gripper stays
-closed when driving so a held object cannot be dropped; Release remains the
-only way to open it. The GUI also has an explicit standby command and shows
+closed when driving so a held object cannot be dropped; Release or an explicit
+manual Set can open it. The GUI also has an explicit standby command and shows
 whether the pose is unavailable, moving, or commanded. A fixed settling
 interval (default 1.2 s) holds the tracks stopped, but there is no servo
 position feedback: a reported standby pose is a command, not verification.
 The first servo command can move immediately.
 Later targets slew at the configured rate. Stop freezes further slew while
 retaining the last pulse; it does not open the claw.
+
+With `manual_servo_enabled=true`, the GUI exposes separate gripper and arm
+angle sliders and a Set button. Moving a slider alone never sends a command.
+Set stops tracks, then commands both angles within the configured 90–150°
+limits. The GUI reports the last commanded targets, not actual measured servo
+positions. Set does not change the configured automatic boot/driving standby;
+adjust `hardware.gripper_standby_angle` and `hardware.arm_standby_angle`
+separately after observing a safe pose. The forward clearance interlock stops
+forward tracks when sonar is too close but leaves controls enabled for reverse.
 
 Never use autonomous driving to discover servo endpoints. After verifying just
 the standby travel, `standby_calibrated=true` permits startup, drive, and

@@ -41,6 +41,7 @@
     "arm_pwm_channel": 1,
     "servo_calibrated": false,
     "standby_calibrated": false,
+    "manual_servo_enabled": false,
     "gripper_min_angle": 90.0,
     "gripper_max_angle": 150.0,
     "gripper_open_angle": 90.0,

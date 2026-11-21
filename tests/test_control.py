@@ -164,10 +164,34 @@ class ControllerTests(unittest.TestCase):
 
     def test_forward_clearance_interlock_allows_manual_back_away(self):
         self.fresh(distance=4)
-        self.assertFalse(self.control.drive(1, 1)["ok"])
-        self.control.set_enabled(True)
+        self.assertTrue(self.control.drive(1, 1)["ok"])
+        self.assertTrue(self.control.snapshot()["enabled"])
+        self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
+        self.assertIn("Front clearance", self.control.snapshot()["reason"])
         self.assertTrue(self.control.drive(-1, -1)["ok"])
         self.assertLess(self.hardware.left, 0)
+
+    def test_manual_pose_requires_opt_in_and_preserves_nonopen_grip_for_drive(self):
+        self.assertFalse(self.control.set_manual_pose(120, 150)["ok"])
+        self.assertEqual(self.hardware.events, [])
+        self.hardware.config["manual_servo_enabled"] = True
+        self.assertFalse(self.control.set_manual_pose(120, 151)["ok"])
+        self.assertEqual(self.hardware.events, [])
+        self.assertTrue(self.control.set_manual_pose(120, 150)["ok"])
+        self.assertEqual(self.hardware.events, [("pose", 120.0, 150.0)])
+        self.assertEqual(self.control.snapshot()["servo_target"], {"gripper": 120.0, "arm": 150.0})
+        self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
+        self.assertTrue(self.control.snapshot()["grip_closed"])
+        self.fresh(distance=4)
+        self.assertTrue(self.control.drive(-1, -1)["ok"])
+        self.assertEqual(self.hardware.events[-1], ("arm", "standby"))
+
+    def test_manual_pose_can_open_gripper_while_drive_disabled(self):
+        self.hardware.config["manual_servo_enabled"] = True
+        self.control.set_enabled(False)
+        self.assertTrue(self.control.set_manual_pose(90, 150)["ok"])
+        self.assertFalse(self.control.snapshot()["enabled"])
+        self.assertFalse(self.control.snapshot()["grip_closed"])
 
     def test_nan_drive_stops_both_tracks(self):
         self.control.drive(1, 1)

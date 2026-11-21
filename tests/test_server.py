@@ -270,6 +270,21 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.runtime.hardware.events, [("grip", "standby"), ("arm", "standby")])
         self.assertEqual((self.runtime.hardware.left, self.runtime.hardware.right), (0, 0))
 
+    async def test_manual_pose_needs_opt_in_and_rejects_out_of_range(self):
+        ws = await self.socket()
+        await self.send(ws, "action", action="set_pose", gripper_angle=100, arm_angle=150)
+        error = await self.receive(ws, "error")
+        self.assertIn("not enabled", error["message"])
+        self.runtime.hardware.config["manual_servo_enabled"] = True
+        await self.send(ws, "action", action="set_pose", gripper_angle=100, arm_angle=151)
+        error = await self.receive(ws, "error")
+        self.assertIn("Arm target", error["message"])
+        self.assertEqual(self.runtime.hardware.events, [])
+        await self.send(ws, "action", action="set_pose", gripper_angle=100, arm_angle=150)
+        state = await self.receive(ws, predicate=lambda message: message["state"]["servo_target"].get("gripper") == 100)
+        self.assertEqual(state["state"]["servo_target"], {"gripper": 100.0, "arm": 150.0})
+        self.assertEqual((self.runtime.hardware.left, self.runtime.hardware.right), (0, 0))
+
     async def test_driver_disconnect_clears_ownership_and_stops(self):
         ws = await self.socket()
         await self.enable(ws)

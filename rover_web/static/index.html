@@ -94,7 +94,21 @@
         </aside>
 
         <section class="panel claw-panel" aria-labelledby="clawTitle">
-          <div class="claw-main"><div class="claw-heading"><span class="claw-symbol"><svg><use href="#i-claw"/></svg></span><div><p class="eyebrow">BALL RETRIEVAL</p><h2 id="clawTitle">Claw control</h2></div></div><p class="claw-description">Grab aligns with the ball, approaches, and closes the claw. Release cancels the approach and opens it. Standby raises the arm and opens an empty gripper; a held grip stays closed.</p><div class="claw-toggle" role="group" aria-label="Claw action"><button id="grabButton" type="button" aria-pressed="false" disabled><svg><use href="#i-claw"/></svg>Grab</button><button id="releaseButton" type="button" aria-pressed="false" disabled>Release <span aria-hidden="true">↗</span></button></div><button id="standbyButton" class="standby-button" type="button" disabled>Move claw to standby</button><p id="standbyStatus" class="standby-status">Checking claw calibration.</p></div>
+          <div class="claw-main">
+            <div class="claw-heading"><span class="claw-symbol"><svg><use href="#i-claw"/></svg></span><div><p class="eyebrow">BALL RETRIEVAL</p><h2 id="clawTitle">Claw control</h2></div></div>
+            <p class="claw-description">Grab aligns with the ball, approaches, and closes the claw. Release cancels the approach and opens it. Standby commands a raised arm; a held grip stays closed. Manual Set can change or open the grip.</p>
+            <div class="claw-toggle" role="group" aria-label="Claw action"><button id="grabButton" type="button" aria-pressed="false" disabled><svg><use href="#i-claw"/></svg>Grab</button><button id="releaseButton" type="button" aria-pressed="false" disabled>Release <span aria-hidden="true">↗</span></button></div>
+            <button id="standbyButton" class="standby-button" type="button" disabled>Move claw to standby</button><p id="standbyStatus" class="standby-status">Checking claw calibration.</p>
+            <div class="manual-pose" aria-labelledby="manualPoseTitle">
+              <h3 id="manualPoseTitle">Manual position</h3>
+              <label for="gripperAngle">Claw angle <output id="gripperAngleValue" for="gripperAngle">—</output></label>
+              <input id="gripperAngle" type="range" min="90" max="150" step="1" value="90" disabled>
+              <label for="armAngle">Arm angle <output id="armAngleValue" for="armAngle">—</output></label>
+              <input id="armAngle" type="range" min="90" max="150" step="1" value="150" disabled>
+              <button id="setPoseButton" type="button" disabled>Set claw and arm</button>
+              <p id="manualPoseStatus" role="status" aria-live="polite">Waiting for rover position settings.</p>
+            </div>
+          </div>
           <div class="claw-progress"><span class="metric-name">RETRIEVAL STATUS</span><div class="retrieval-state"><span id="retrievalDot" class="status-dot"></span><strong id="retrievalLabel">Standing by</strong></div><p id="retrievalDetail">Enable controls to begin.</p><div class="progress-steps" aria-label="Retrieval progress"><span data-step="target">Find ball</span><i></i><span data-step="approach">Approach</span><i></i><span data-step="grip">Grip</span></div></div>
         </section>
 
