@@ -27,6 +27,7 @@
 .drive-diagnostic-label{color:var(--muted);font:9px var(--mono);letter-spacing:1.2px}
 .drive-diagnostic.fault{border-color:#70463e;color:var(--red)}
 .drive-diagnostic.ready{border-color:#3a4c34;color:var(--green)}
+.drive-diagnostic.warning{border-color:#69502c;color:var(--accent)}
 .standby-button{display:block;margin-top:10px;padding:9px 12px;border:1px solid var(--line);border-radius:5px;background:var(--panel-2);font-size:11px}
 .standby-button:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
 .standby-button:disabled{opacity:.55}

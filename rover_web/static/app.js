@@ -169,6 +169,11 @@
     const owned = ownsControl();
     const enabled = localEnabled && owned && state.enabled === true && healthy && linked;
     const positioning = state.standby_state === "moving";
+    const nearFrontStop = finite(state.distance_cm) && finite(state.min_clearance_cm) &&
+      state.distance_cm <= state.min_clearance_cm + 2;
+    const frontStopMessage = nearFrontStop ? state.distance_cm <= state.min_clearance_cm ?
+      `Front clearance ${state.distance_cm.toFixed(1)} cm is inside the ${state.min_clearance_cm} cm stop limit; forward drive will stop controls.` :
+      `Front clearance ${state.distance_cm.toFixed(1)} cm is near the ${state.min_clearance_cm} cm stop limit; a closer reading will stop forward drive.` : null;
     for (const button of padButtons) button.disabled = !enabled || positioning;
     const enable = $("enableButton");
     enable.disabled = !linked || !healthy || !ticket || (controlBusy() && !owned) || enableRequested;
@@ -195,13 +200,16 @@
     readoutText.textContent = !linked ? "Control link disconnected. Reconnect before enabling." :
       enableRequested ? "Waiting for the rover to enable controls…" :
       enabled && positioning ? "Claw moving to standby; tracks held stopped." :
+      enabled && frontStopMessage ? frontStopMessage :
       enabled && state.standby_state === "unavailable" ? "Drive ready; automatic claw standby needs servo calibration." :
       enabled ? "Ready. Hold a direction to drive; release to stop." :
       driveStopReason || (
       controlBusy() && !owned ? "Another browser has control of TANK." :
+      frontStopMessage ? frontStopMessage :
       !healthy ? "Live video is not fresh. Drive is disabled until it recovers." :
       state.reason || "Enable controls to begin.");
-    readout.classList.toggle("ready", enabled && !positioning);
+    readout.classList.toggle("ready", enabled && !positioning && !frontStopMessage);
+    readout.classList.toggle("warning", !!frontStopMessage && !driveFault);
     readout.classList.toggle("fault", !enabled && driveFault);
   }
 

@@ -644,6 +644,7 @@ class RobotController:
                 "last_fault": self._last_fault,
                 "distance_cm": self._range_cm if self._range_at is not None
                     and now - self._range_at <= self.config["range_max_age_s"] else None,
+                "min_clearance_cm": self.config["min_clearance_cm"],
                 "target": target, "motor": {"left": self._motor[0], "right": self._motor[1]},
                 "vision_age_s": max(0, now - self._vision.captured_at) if self._vision.captured_at > 0 else None,
                 "range_age_s": max(0, now - self._range_at) if self._range_at is not None else None,
