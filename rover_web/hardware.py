@@ -2,7 +2,8 @@
 
 Pin mapping follows Freenove's Code/Server/motor.py and servo.py. No vendor
 Servo object is constructed: its constructor commands arm movement. The
-adapter starts with tracks stopped and no servo pulse. Hardware is used only
+adapter starts with tracks stopped; the controller commands the configured
+standby pose at startup only after servo commissioning. Hardware is used only
 when FreenoveHardware is explicitly constructed on the Raspberry Pi.
 """
 from __future__ import annotations
@@ -33,11 +34,13 @@ HARDWARE_DEFAULTS = {
     "gripper_max_angle": 150.0,
     "gripper_open_angle": 90.0,
     "gripper_closed_angle": 145.0,
+    "gripper_standby_angle": 90.0,
     "gripper_inverted": False,
     "arm_min_angle": 90.0,
     "arm_max_angle": 150.0,
     "arm_pickup_angle": 95.0,
     "arm_carry_angle": 135.0,
+    "arm_standby_angle": 140.0,
     "arm_inverted": False,
     "servo_slew_deg_s": 60.0,
 }
@@ -63,7 +66,8 @@ def validate_hardware_config(config: dict | None) -> dict:
         raise ValueError("Ultrasonic maximum must be 10 to 400 cm")
     if not 10 <= float(result["servo_slew_deg_s"]) <= 180:
         raise ValueError("Servo slew rate must be 10 to 180 degrees/second")
-    for name, positions in (("gripper", ("open", "closed")), ("arm", ("pickup", "carry"))):
+    for name, positions in (("gripper", ("open", "closed", "standby")),
+                            ("arm", ("pickup", "carry", "standby"))):
         low, high = float(result[f"{name}_min_angle"]), float(result[f"{name}_max_angle"])
         if not 0 <= low < high <= 180:
             raise ValueError(f"Invalid {name} servo travel limits")
@@ -204,9 +208,15 @@ class FreenoveHardware:
         self._servo_target("gripper", self.config[f"gripper_{position}_angle"])
 
     def arm(self, position: str):
-        if position not in ("pickup", "carry"):
-            raise ValueError("Arm position must be pickup or carry")
+        if position not in ("pickup", "carry", "standby"):
+            raise ValueError("Arm position must be pickup, carry, or standby")
         self._servo_target("arm", self.config[f"arm_{position}_angle"])
+
+    def standby(self, *, keep_closed: bool = False):
+        """Command the calibrated driving pose without opening a held grip."""
+        if not keep_closed:
+            self._servo_target("gripper", self.config["gripper_standby_angle"])
+        self.arm("standby")
 
     def hold_manipulator(self):
         """Cancel pending servo travel while keeping the last pulses active.
@@ -325,10 +335,18 @@ class SimHardware:
     def arm(self, position):
         if not self.manipulator_ready:
             raise RuntimeError("Servo calibration required")
-        if position not in ("pickup", "carry"):
+        if position not in ("pickup", "carry", "standby"):
             raise ValueError("Unknown arm position")
         self.arm_position = position
         self.events.append(("arm", position))
+
+    def standby(self, *, keep_closed=False):
+        if not keep_closed:
+            if not self.manipulator_ready:
+                raise RuntimeError("Servo calibration required")
+            self.gripper_open = True
+            self.events.append(("grip", "standby"))
+        self.arm("standby")
 
     def distance_cm(self):
         return self.range_cm

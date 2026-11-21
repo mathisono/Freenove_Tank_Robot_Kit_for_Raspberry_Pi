@@ -69,7 +69,6 @@ class RoverRuntime:
             except Exception as exc:
                 self.vision_error = str(exc)
                 self.controller.stop("Vision processing failed")
-                self.controller.set_enabled(False)
                 LOG.exception("Ball detector failed")
                 self._halt.wait(0.5)
 
@@ -169,9 +168,9 @@ class Console:
                                {"state": "unavailable", "error": self.status_led_error})
         return state
 
-    def revoke(self, reason: str) -> None:
+    def revoke(self, reason: str, *, preserve_reason: bool = False) -> None:
         if self.controller:
-            self.controller.stop(reason)
+            self.controller.stop(reason, preserve_reason=preserve_reason)
         self.owner = None
 
     @staticmethod
@@ -231,8 +230,13 @@ class Console:
 
     async def telemetry(self) -> None:
         while True:
-            if self.owner and (not self.video_fresh(self.owner) or not self.controller.snapshot().get("enabled")):
-                self.revoke("Video or control heartbeat expired")
+            if self.owner:
+                if not self.controller.snapshot().get("enabled"):
+                    # The controller already recorded the specific fault. Retry
+                    # stopping outputs without replacing that diagnostic.
+                    self.revoke("Control stopped", preserve_reason=True)
+                elif not self.video_fresh(self.owner):
+                    self.revoke("Video or control heartbeat expired")
             if self.status_led:
                 self.status_led.set_web_state(
                     connected=bool(self.clients),
@@ -356,6 +360,10 @@ class Console:
             if self.owner and self.owner is not client:
                 raise ValueError("The current driver must release the claw")
             self.accepted(self.controller.release())
+        elif kind == "action" and action == "standby":
+            if self.owner and self.owner is not client:
+                raise ValueError("The current driver must position the claw")
+            self.accepted(self.controller.standby())
         elif kind == "action" and action == "disable":
             if self.owner is client:
                 self.revoke("Controls disabled")

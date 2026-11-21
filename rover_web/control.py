@@ -53,6 +53,7 @@ CONTROL_DEFAULTS = {
     "lift_settle_s": 1.2,
     "release_lower_s": 1.2,
     "release_open_s": 1.2,
+    "standby_settle_s": 1.2,
 }
 
 
@@ -65,7 +66,7 @@ def validate_control_config(config: dict | None) -> dict:
                 "vision_max_age_s", "range_max_age_s", "range_poll_s", "target_lost_timeout_s",
                 "acquire_timeout_s", "autonomy_timeout_s", "approach_slowdown_cm", "min_clearance_cm",
                 "grasp_range_tolerance_cm", "geometry_tolerance_cm", "prepare_s", "grip_settle_s",
-                "lift_settle_s", "release_lower_s", "release_open_s")
+                "lift_settle_s", "release_lower_s", "release_open_s", "standby_settle_s")
     for key in positive:
         if not math.isfinite(float(result[key])) or float(result[key]) <= 0:
             raise ValueError(f"control.{key} must be positive and finite")
@@ -113,6 +114,7 @@ class RobotController:
         self._enabled = False
         self._phase = "stopped"
         self._reason = "Enable controls to begin"
+        self._last_fault = None
         self._heartbeat_at = None
         self._drive_at = None
         self._manual = (0.0, 0.0)
@@ -122,6 +124,8 @@ class RobotController:
         self._range_at = None
         self._range_sequence = 0
         self._grip_closed = None
+        self._standby_commanded = False
+        self._standby_until = None
         self._request_started = None
         self._stage_deadline = None
         self._preparing = False
@@ -134,6 +138,12 @@ class RobotController:
         self._last_close_sample = None
         self._release_opened = False
         self.hardware.stop()
+        if self.hardware.manipulator_ready:
+            try:
+                self._prepare_standby()
+                self._reason = "Claw commanded to standby at startup; tracks stopped"
+            except Exception as exc:
+                self._abort(f"Claw startup standby failed: {exc}")
         if autostart:
             self.start()
 
@@ -212,25 +222,40 @@ class RobotController:
                 return self._result(False)
             self._halt()
             self._cancel_auto()
+            self._standby_commanded = False
+            self._standby_until = None
             self._enabled = bool(enabled)
             if enabled:
                 self._heartbeat_at = self.clock()
                 self._phase = "holding" if self._grip_closed else "idle"
-                self._reason = "Controls enabled; tracks stopped"
+                if self.hardware.manipulator_ready:
+                    try:
+                        self._prepare_standby()
+                    except Exception as exc:
+                        self._abort(f"Claw standby failed: {exc}")
+                        return self._result(False)
+                    self._reason = "Claw moving to standby; tracks stopped"
+                else:
+                    self._reason = "Controls enabled; claw standby unavailable until servo calibration"
+                self._last_fault = None
             else:
                 self._heartbeat_at = None
                 self._phase = "holding" if self._grip_closed else "stopped"
                 self._reason = "Controls disabled; gripper position preserved"
             return self._result()
 
-    def stop(self, reason="Stopped by operator"):
+    def stop(self, reason="Stopped by operator", *, preserve_reason=False):
         with self._lock:
+            previous_reason, previous_phase = self._reason, self._phase
             self._enabled = False
             self._heartbeat_at = None
             self._halt()
             self._cancel_auto()
-            self._phase = "holding" if self._grip_closed else "stopped"
-            self._reason = str(reason)
+            self._standby_commanded = False
+            self._standby_until = None
+            self._phase = previous_phase if preserve_reason and previous_phase == "error" else (
+                "holding" if self._grip_closed else "stopped")
+            self._reason = previous_reason if preserve_reason else str(reason)
             return self._result()
 
     def drive(self, left: float, right: float, source="web"):
@@ -244,7 +269,10 @@ class RobotController:
                 return self._result(False)
             if left == 0 and right == 0:
                 self._halt()
-                self._cancel_auto()
+                if self._phase in self.AUTO_PHASES or self._phase == "releasing":
+                    self._cancel_auto()
+                    self._standby_commanded = False
+                    self._standby_until = None
                 self._phase = "holding" if self._grip_closed else ("idle" if self._enabled else "stopped")
                 self._reason = "Tracks stopped"
                 return self._result()
@@ -252,7 +280,16 @@ class RobotController:
                 self.stop("Enable controls before driving")
                 return self._result(False)
             # Explicit Direct input cancels Grab. It never opens a closed grip.
-            self._cancel_auto()
+            replacing_auto = self._phase in self.AUTO_PHASES or self._phase == "releasing"
+            needs_standby = not self._standby_commanded or replacing_auto
+            if replacing_auto:
+                self._cancel_auto()
+            if needs_standby and self.hardware.manipulator_ready:
+                try:
+                    self._prepare_standby()
+                except Exception as exc:
+                    self._abort(f"Claw standby failed: {exc}")
+                    return self._result(False)
             self._phase = "holding" if self._grip_closed else "idle"
             self._manual = (max(-1, min(1, left)), max(-1, min(1, right)))
             self._drive_at = self.clock()
@@ -262,6 +299,36 @@ class RobotController:
             except Exception as exc:
                 self._abort(f"Drive output failed: {exc}")
             return self._result(self._enabled)
+
+    def _prepare_standby(self):
+        """Keep tracks stopped until the commanded pose has time to settle.
+
+        The servo has no position feedback; this is a command, not a measured
+        position. Preserve a closed grip so driving cannot drop an object.
+        """
+        self.hardware.standby(keep_closed=bool(self._grip_closed))
+        if not self._grip_closed:
+            self._grip_closed = False
+        self._standby_commanded = True
+        self._standby_until = self.clock() + (0 if self.hardware.simulated else self.config["standby_settle_s"])
+
+    def standby(self):
+        """Explicitly command the standby pose without enabling tracks."""
+        with self._lock:
+            self._halt()
+            self._cancel_auto()
+            self._standby_commanded = False
+            if not self.hardware.manipulator_ready:
+                self._reason = "Claw standby needs commissioned servo angles"
+                return self._result(False)
+            try:
+                self._prepare_standby()
+            except Exception as exc:
+                self._abort(f"Claw standby failed: {exc}")
+                return self._result(False)
+            self._phase = "holding" if self._grip_closed else ("idle" if self._enabled else "stopped")
+            self._reason = "Claw moving to standby; tracks stopped"
+            return self._result()
 
     def calibration_error(self):
         if not self.config["autonomy_calibrated"]:
@@ -294,6 +361,8 @@ class RobotController:
             self._halt()
             self._cancel_auto()
             self._phase = "acquiring"
+            self._standby_commanded = False
+            self._standby_until = None
             self._reason = "Waiting stationary for a ball in view"
             self._request_started = self.clock()
             return self._result()
@@ -314,6 +383,8 @@ class RobotController:
                 return self._result(False)
             try:
                 self.hardware.arm("pickup")
+                self._standby_commanded = False
+                self._standby_until = None
                 self._phase = "releasing"
                 self._reason = "Lowering arm for explicit release"
                 self._release_opened = False
@@ -359,8 +430,11 @@ class RobotController:
         except Exception:
             self._motor = (0.0, 0.0)
         self._cancel_auto()
+        self._standby_commanded = False
+        self._standby_until = None
         self._phase = "holding" if self._grip_closed else "error"
         self._reason = str(reason)
+        self._last_fault = self._reason
 
     def _heartbeat_fresh(self, now):
         return self._heartbeat_at is not None and now - self._heartbeat_at < self.config["heartbeat_timeout_s"]
@@ -375,6 +449,10 @@ class RobotController:
         return None
 
     def _apply_manual(self, now):
+        if self._standby_until is not None and now < self._standby_until:
+            self._set_motors(0, 0)
+            self._reason = "Claw moving to standby; tracks stopped"
+            return
         error = self._sensor_error(now)
         if error:
             self._abort(error)
@@ -410,6 +488,9 @@ class RobotController:
             if not self._heartbeat_fresh(now):
                 self.stop("Controller connection expired; enable again to resume")
                 return
+            if self._standby_commanded and self._drive_at is None and self._standby_until is not None \
+                    and now >= self._standby_until and self._reason == "Claw moving to standby; tracks stopped":
+                self._reason = "Claw commanded to standby; tracks stopped"
             if self._phase in self.AUTO_PHASES:
                 self._tick_grab(now)
                 return
@@ -553,8 +634,14 @@ class RobotController:
             return {
                 "enabled": self._enabled, "mode": "direct", "phase": self._phase,
                 "grip_closed": self._grip_closed, "possession_confirmed": False,
+                "manipulator_calibrated": bool(self.hardware.manipulator_ready),
+                "standby_state": ("unavailable" if not self.hardware.manipulator_ready else
+                                  "other" if not self._standby_commanded else
+                                  "moving" if self._standby_until is not None and now < self._standby_until else
+                                  "commanded"),
                 "autonomy_calibrated": self.calibration_error() is None,
                 "reason": self._reason,
+                "last_fault": self._last_fault,
                 "distance_cm": self._range_cm if self._range_at is not None
                     and now - self._range_at <= self.config["range_max_age_s"] else None,
                 "target": target, "motor": {"left": self._motor[0], "right": self._motor[1]},

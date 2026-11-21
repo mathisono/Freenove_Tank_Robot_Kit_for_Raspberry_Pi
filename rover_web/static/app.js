@@ -41,6 +41,8 @@
   let videoGeneration = 0;
   let bootstrapGeneration = 0;
   let noticeTimer = null;
+  let driveStopReason = null;
+  let driveFault = false;
   let retired = false;
 
   const finite = (value) => typeof value === "number" && Number.isFinite(value);
@@ -126,7 +128,7 @@
   }
 
   function driveTick() {
-    if (!localEnabled || !ownsControl() || !freshVideo()) {
+    if (!localEnabled || !ownsControl() || !freshVideo() || state.standby_state === "moving") {
       zeroDrive();
       return;
     }
@@ -144,6 +146,8 @@
   function stopRover(reason = "Movement stopped.", quiet = false) {
     clearInput();
     send({type: "action", action: "stop"}, {urgent: true});
+    driveStopReason = reason;
+    driveFault = false;
     localEnabled = false;
     enableRequested = false;
     updateControls();
@@ -164,7 +168,8 @@
     const healthy = freshVideo();
     const owned = ownsControl();
     const enabled = localEnabled && owned && state.enabled === true && healthy && linked;
-    for (const button of padButtons) button.disabled = !enabled;
+    const positioning = state.standby_state === "moving";
+    for (const button of padButtons) button.disabled = !enabled || positioning;
     const enable = $("enableButton");
     enable.disabled = !linked || !healthy || !ticket || (controlBusy() && !owned) || enableRequested;
     enable.classList.toggle("active", enabled);
@@ -178,8 +183,26 @@
     // Release is a non-driving action. The server permits the owner, or an
     // observer when there is no owner, to stop and open the claw without video.
     $("releaseButton").disabled = !linked || !ticket || (controlBusy() && !owned) || currentPhase() === "releasing";
+    $("standbyButton").disabled = !linked || !ticket || (controlBusy() && !owned) || state.manipulator_calibrated !== true;
+    $("standbyButton").title = state.manipulator_calibrated !== true ? "Commission the gripper and arm servo angles first" : "Raise the arm for driving; keep a held grip closed";
+    $("standbyStatus").textContent = state.standby_state === "moving" ? "Moving to standby; tracks held stopped." :
+      state.standby_state === "commanded" ? state.grip_closed === true ? "Arm commanded to standby; grip held closed." : "Claw commanded to standby." :
+      state.standby_state === "unavailable" ? "Standby unavailable until servo angles are commissioned." : "Claw is away from standby.";
     $("stopButton").disabled = !authenticated || !linked;
     $("footerStatus").textContent = enabled ? "You have control" : controlBusy() && !owned ? "Viewing · another operator has control" : "Controls disabled";
+    const readout = $("driveDiagnostic");
+    const readoutText = $("driveDiagnosticText");
+    readoutText.textContent = !linked ? "Control link disconnected. Reconnect before enabling." :
+      enableRequested ? "Waiting for the rover to enable controls…" :
+      enabled && positioning ? "Claw moving to standby; tracks held stopped." :
+      enabled && state.standby_state === "unavailable" ? "Drive ready; automatic claw standby needs servo calibration." :
+      enabled ? "Ready. Hold a direction to drive; release to stop." :
+      driveStopReason || (
+      controlBusy() && !owned ? "Another browser has control of TANK." :
+      !healthy ? "Live video is not fresh. Drive is disabled until it recovers." :
+      state.reason || "Enable controls to begin.");
+    readout.classList.toggle("ready", enabled && !positioning);
+    readout.classList.toggle("fault", !enabled && driveFault);
   }
 
   function setConnection(connected, label) {
@@ -193,11 +216,18 @@
     if (enableRequested && state.enabled === true && ownsControl()) {
       enableRequested = false;
       localEnabled = true;
+      driveStopReason = null;
+      driveFault = false;
       announce("Rover controls enabled");
     }
     if (!ownsControl() || state.enabled !== true) {
       localEnabled = false;
       clearInput();
+      const stoppedByFault = state.phase === "error" || /stale|expired|failed|fault|clearance|no valid ultrasonic|live video stopped|connection stalled|disconnected/i.test(state.reason || "");
+      if (state.last_fault || (stoppedByFault && state.reason)) {
+        driveStopReason = state.last_fault || state.reason;
+        driveFault = true;
+      }
     }
     $("demoBadge").hidden = state.demo !== true;
     const distance = state.distance_cm;
@@ -249,7 +279,11 @@
       const message = String(payload.message || payload.error || "The rover could not complete that command.");
       const stale = payload.code === "stale_ticket" || /stale[_ ]ticket|expired.*ticket|ticket.*expired/i.test(message);
       if (enableRequested) enableRequested = false;
-      if (!stale) showNotice(message, true);
+      if (!stale) {
+        driveStopReason = message;
+        driveFault = true;
+        showNotice(message, true);
+      }
       updateControls();
     }
   }
@@ -539,6 +573,10 @@
   $("releaseButton").addEventListener("click", () => {
     clearInput();
     send({type: "action", action: "release"}, {urgent: true});
+  });
+  $("standbyButton").addEventListener("click", () => {
+    clearInput();
+    send({type: "action", action: "standby"}, {urgent: true});
   });
   $("stopButton").addEventListener("pointerdown", (event) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;

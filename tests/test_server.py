@@ -61,6 +61,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         self.config["control"]["release_lower_s"] = 0.001
         self.config["control"]["release_open_s"] = 0.001
         self.runtime = FakeRuntime(self.config)
+        self.runtime.hardware.events.clear()
         self.app = create_app(self.config, demo=False, token=TOKEN, runtime=self.runtime)
         self.console = self.app[CONSOLE_KEY]
         self.client = TestClient(TestServer(self.app), cookie_jar=CookieJar(unsafe=True))
@@ -242,10 +243,32 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
     async def test_uncalibrated_grab_returns_an_error(self):
         ws = await self.socket()
         await self.enable(ws)
+        self.runtime.hardware.events.clear()
         await self.send(ws, "action", action="grab")
         error = await self.receive(ws, "error")
         self.assertIn("calibration", error["message"])
         self.assertEqual(self.runtime.hardware.events, [])
+
+    async def test_sensor_fault_remains_visible_after_ownership_revocation(self):
+        ws = await self.socket()
+        await self.enable(ws)
+        self.runtime.controller.update_range(None, time.monotonic())
+        await self.send(ws, "drive", seq=1, throttle=0.5, steering=0)
+        error = await self.receive(ws, "error")
+        self.assertIn("ultrasonic echo", error["message"])
+        state = await self.receive(ws, predicate=lambda message: not message["state"]["enabled"])
+        self.assertIn("ultrasonic echo", state["state"]["reason"])
+        self.assertEqual((self.runtime.hardware.left, self.runtime.hardware.right), (0, 0))
+
+    async def test_explicit_standby_is_commanded_with_tracks_stopped(self):
+        ws = await self.socket()
+        await self.enable(ws)
+        self.runtime.hardware.events.clear()
+        await self.send(ws, "action", action="standby")
+        state = await self.receive(ws, predicate=lambda message: message["state"]["reason"].startswith("Claw moving"))
+        self.assertEqual(state["state"]["standby_state"], "commanded")
+        self.assertEqual(self.runtime.hardware.events, [("grip", "standby"), ("arm", "standby")])
+        self.assertEqual((self.runtime.hardware.left, self.runtime.hardware.right), (0, 0))
 
     async def test_driver_disconnect_clears_ownership_and_stops(self):
         ws = await self.socket()

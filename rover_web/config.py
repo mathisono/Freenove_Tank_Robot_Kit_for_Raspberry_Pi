@@ -61,9 +61,15 @@ def load_config(path: str | Path | None = None) -> dict:
 
 
 def validate_config(config: dict) -> None:
-    validate_hardware_config(config["hardware"])
+    hardware = validate_hardware_config(config["hardware"])
     validate_status_led_config(config["status_led"], config["hardware"])
-    validate_control_config(config["control"])
+    control = validate_control_config(config["control"])
+    if hardware["servo_calibrated"]:
+        longest_travel = max(float(hardware["gripper_max_angle"]) - float(hardware["gripper_min_angle"]),
+                             float(hardware["arm_max_angle"]) - float(hardware["arm_min_angle"]))
+        minimum_settle = longest_travel / float(hardware["servo_slew_deg_s"]) + 0.1
+        if float(control["standby_settle_s"]) < minimum_settle:
+            raise ValueError(f"control.standby_settle_s must be at least {minimum_settle:.2f} s for calibrated servo travel")
     validate_vision_config(config["vision"])
     server, camera = config["server"], config["camera"]
     if not isinstance(server["host"], str) or not server["host"]:

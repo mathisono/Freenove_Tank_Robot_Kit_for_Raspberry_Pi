@@ -147,6 +147,7 @@ Default values are starting limits, not measurements of this rover:
 | `hardware.servo_calibrated` | false until travel and endpoints are checked |
 | Gripper open / closed | 90° / 145°, within 90–150° bounds |
 | Arm pickup / carry | 95° / 135°, within 90–150° bounds |
+| Gripper / arm standby | Nominal 90° open / 140° raised from original Freenove startup; verify on this rover |
 | `control.autonomy_calibrated` | false until complete pickup is commissioned |
 | `control.grasp_stop_cm` | sonar reading with ball correctly inside open claw |
 | `control.ball_diameter_cm` | measured diameter of the actual ball |
@@ -155,14 +156,21 @@ Default values are starting limits, not measurements of this rover:
 | `control.camera_to_sonar_cm` | signed axial offset: positive when sonar is in front of the camera toward the ball; negative when behind |
 
 Use the original working endpoints as evidence and verify them with the
-tracks lifted. Nominal angles do not prove linkage clearance. The first
-explicit servo command can move immediately: there is no position feedback.
+tracks lifted. Nominal angles do not prove linkage clearance. Once
+`servo_calibrated=true`, startup commands the configured standby pose and
+manual driving commands it again before tracks move. A closed gripper stays
+closed when driving so a held object cannot be dropped; Release remains the
+only way to open it. The GUI also has an explicit standby command and shows
+whether the pose is unavailable, moving, or commanded. A fixed settling
+interval (default 1.2 s) holds the tracks stopped, but there is no servo
+position feedback: a reported standby pose is a command, not verification.
+The first servo command can move immediately.
 Later targets slew at the configured rate. Stop freezes further slew while
 retaining the last pulse; it does not open the claw.
 
 Never use autonomous driving to discover servo endpoints. After safe endpoints
-are known, set `servo_calibrated=true` to permit explicit Release/manipulator
-commands. Keep `autonomy_calibrated=false` while measuring geometry. Do not
+are known, set `servo_calibrated=true` to permit startup standby, drive standby,
+explicit Standby/Release commands. Keep `autonomy_calibrated=false` while measuring geometry. Do not
 change calibration flags merely to unlock buttons.
 
 For a centered ball at known camera-to-center distance Z, image diameter d
