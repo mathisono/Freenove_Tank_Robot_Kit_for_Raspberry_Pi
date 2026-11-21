@@ -481,27 +481,33 @@ class RobotController:
     def _heartbeat_fresh(self, now):
         return self._heartbeat_at is not None and now - self._heartbeat_at < self.config["heartbeat_timeout_s"]
 
-    def _sensor_error(self, now):
+    def _camera_error(self, now):
         if self._vision.captured_at <= 0 or now - self._vision.captured_at > self.config["vision_max_age_s"]:
             return "Camera frames are stale; controls stopped"
-        if self._range_at is None or now - self._range_at > self.config["range_max_age_s"]:
-            return "Ultrasonic range is stale; controls stopped"
-        if self._range_cm is None:
-            return "No valid ultrasonic echo; controls stopped"
         return None
+
+    def _range_error(self, now):
+        if self._range_at is None or now - self._range_at > self.config["range_max_age_s"]:
+            return "Ultrasonic range is stale"
+        if self._range_cm is None:
+            return "No valid ultrasonic echo"
+        return None
+
+    def _sensor_error(self, now):
+        camera_error = self._camera_error(now)
+        if camera_error:
+            return camera_error
+        range_error = self._range_error(now)
+        return f"{range_error}; controls stopped" if range_error else None
 
     def _apply_manual(self, now):
         if (self._standby_until is not None and now < self._standby_until) or (self._manual_pose_until is not None and now < self._manual_pose_until):
             self._set_motors(0, 0)
             self._reason = "Claw moving; tracks stopped"
             return
-        error = self._sensor_error(now)
+        error = self._camera_error(now)
         if error:
             self._abort(error)
-            return
-        if self._range_cm <= self.config["min_clearance_cm"] and max(self._manual) > 0:
-            self._set_motors(0, 0)
-            self._reason = "Front clearance is below the stop distance; forward tracks stopped"
             return
         speed = self.config["manual_max_speed"]
         self._set_motors(self._manual[0] * speed, self._manual[1] * speed)

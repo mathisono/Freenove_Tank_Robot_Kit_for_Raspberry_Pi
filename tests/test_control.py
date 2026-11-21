@@ -150,26 +150,36 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(self.control.drive(1, 1)["ok"])
         self.assertIn("Camera", self.control.snapshot()["reason"])
 
-    def test_stale_range_stops_direct_control(self):
+    def test_stale_range_does_not_stop_direct_control(self):
         self.clock.advance(0.4)
         self.control.heartbeat()
         self.control.update_vision(BallObservation(captured_at=self.clock()))
-        self.assertFalse(self.control.drive(1, 1)["ok"])
-        self.assertIn("range is stale", self.control.snapshot()["reason"])
+        self.assertTrue(self.control.drive(1, 1)["ok"])
+        self.assertTrue(self.control.snapshot()["enabled"])
+        self.assertGreater(self.hardware.left, 0)
 
-    def test_missing_echo_does_not_become_clear_path(self):
+    def test_missing_echo_does_not_stop_direct_control(self):
         self.control.update_range(None)
-        self.assertFalse(self.control.drive(1, 1)["ok"])
-        self.assertEqual(self.hardware.left, 0)
+        self.assertTrue(self.control.drive(1, 1)["ok"])
+        self.assertTrue(self.control.snapshot()["enabled"])
+        self.assertGreater(self.hardware.left, 0)
+        self.assertIsNone(self.control.snapshot()["distance_cm"])
 
-    def test_forward_clearance_interlock_allows_manual_back_away(self):
+    def test_close_sonar_does_not_stop_direct_forward_or_reverse(self):
         self.fresh(distance=4)
         self.assertTrue(self.control.drive(1, 1)["ok"])
         self.assertTrue(self.control.snapshot()["enabled"])
-        self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
-        self.assertIn("Front clearance", self.control.snapshot()["reason"])
+        self.assertGreater(self.hardware.left, 0)
         self.assertTrue(self.control.drive(-1, -1)["ok"])
         self.assertLess(self.hardware.left, 0)
+
+    def test_missing_echo_still_stops_automatic_grab(self):
+        self.reach_approach()
+        self.control.update_range(None, self.clock())
+        self.control.tick()
+        self.assertFalse(self.control.snapshot()["enabled"])
+        self.assertIn("ultrasonic echo", self.control.snapshot()["reason"])
+        self.assertEqual((self.hardware.left, self.hardware.right), (0, 0))
 
     def test_manual_pose_requires_opt_in_and_preserves_nonopen_grip_for_drive(self):
         self.assertFalse(self.control.set_manual_pose(120, 150)["ok"])

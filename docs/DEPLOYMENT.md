@@ -128,9 +128,9 @@ do not disable validation to make a connection appear successful.
 
 For first motor checks lift the tracks clear, supervise locally, enable S2,
 and use low speed. Verify forward/reverse/left/right; adjust only the required
-`left_inverted`/`right_inverted` setting. Direct drive needs fresh camera and
-valid sonar even without a ball. During a raised-track test point the sonar
-at an object in range. No echo is missing data, never an invented clear path.
+`left_inverted`/`right_inverted` setting. Direct drive needs fresh camera but
+does not use sonar as a motion interlock. A missing echo remains invalid data
+for automatic Grab, not an invented clear path.
 Check release-to-stop, Space, STOP, tab hiding, Wi-Fi loss, and camera stalls.
 Reconnection must not resume motion automatically.
 
@@ -177,8 +177,8 @@ limits. The GUI reports the last commanded targets, not actual measured servo
 positions. Set atomically saves both targets as the automatic boot/driving
 standby in the configured JSON file; the rover service must have write access
 to that file. Save failures stop controls and appear in the GUI. Confirm the
-physical pose is safe before using it for standby. The forward clearance interlock stops
-forward tracks when sonar is too close but leaves controls enabled for reverse.
+physical pose is safe before using it for standby. Direct drive ignores sonar
+range, including close and missing echoes; automatic Grab still requires it.
 
 Never use autonomous driving to discover servo endpoints. After verifying just
 the standby travel, `standby_calibrated=true` permits startup, drive, and

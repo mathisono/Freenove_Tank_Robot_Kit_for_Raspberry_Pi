@@ -120,11 +120,11 @@ connect. Do not open router ports or add public exposure to solve this.
 
 Coordinate with me to lift the tracks clear, keep S2 accessible, enable the
 load, and test low-speed forward/reverse/turns. Correct only necessary motor
-polarity settings. Direct driving requires fresh camera and valid sonar;
-during a bench test point the sonar at an object in its valid range. Verify
+polarity settings. Direct driving requires fresh camera but ignores sonar;
+automatic Grab still requires valid range. Verify
 release-to-stop, STOP, Space, tab hiding, loss of Wi-Fi, stale video, expired
 commands, and that reconnecting never restarts motion. No echo must remain
-invalid data, not be converted into a clear path.
+invalid data for Grab, not be converted into a clear path.
 
 ## Commission Grab and Release
 

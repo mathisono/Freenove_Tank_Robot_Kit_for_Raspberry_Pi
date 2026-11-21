@@ -256,16 +256,16 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("calibration", error["message"])
         self.assertEqual(self.runtime.hardware.events, [])
 
-    async def test_sensor_fault_remains_visible_after_ownership_revocation(self):
+    async def test_missing_echo_does_not_revoke_direct_driver(self):
         ws = await self.socket()
         await self.enable(ws)
         self.runtime.controller.update_range(None, time.monotonic())
         await self.send(ws, "drive", seq=1, throttle=0.5, steering=0)
-        error = await self.receive(ws, "error")
-        self.assertIn("ultrasonic echo", error["message"])
-        state = await self.receive(ws, predicate=lambda message: not message["state"]["enabled"])
-        self.assertIn("ultrasonic echo", state["state"]["reason"])
-        self.assertEqual((self.runtime.hardware.left, self.runtime.hardware.right), (0, 0))
+        state = await self.receive(ws, predicate=lambda message: message["state"]["motor"]["left"] > 0)
+        self.assertTrue(state["state"]["enabled"])
+        self.assertTrue(state["state"]["control_owned"])
+        self.assertIsNone(state["state"]["distance_cm"])
+        self.assertGreater(self.runtime.hardware.left, 0)
 
     async def test_explicit_standby_is_commanded_with_tracks_stopped(self):
         ws = await self.socket()

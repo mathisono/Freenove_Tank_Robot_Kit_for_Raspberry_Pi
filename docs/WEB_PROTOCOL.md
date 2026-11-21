@@ -47,7 +47,9 @@ Drive values are normalized -1..1; positive steering turns right. Motor output
 is scaled by the configured speed cap. Drive sequence numbers must increase
 for that WebSocket. A nonzero Direct command overrides a Grab sequence. A
 zero drive command stops tracks and cancels approach; do not send idle zeros
-continuously while Grab is active.
+continuously while Grab is active. Direct drive ignores close, stale, and
+missing sonar readings; the sonar display is informational. Automatic Grab
+still requires valid range readings.
 
 Heartbeat interval is 150 ms. `video_ok` means actual displayed video frames
 are still arriving, not just that the WebRTC connection says “connected”.
